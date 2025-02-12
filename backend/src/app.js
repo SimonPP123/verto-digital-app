@@ -5,7 +5,7 @@ const morgan = require('morgan');
 const passport = require('passport');
 const session = require('express-session');
 const Redis = require('redis');
-const connectRedis = require('connect-redis');
+const RedisStore = require('connect-redis').default;
 const logger = require('./utils/logger');
 const { testConnection, initDatabase } = require('../config/db');
 
@@ -19,7 +19,6 @@ const redisClient = Redis.createClient({
 redisClient.connect().catch(console.error);
 
 // Initialize Redis store
-const RedisStore = connectRedis(session);
 const redisStore = new RedisStore({ 
   client: redisClient,
   prefix: 'verto:sess:',
