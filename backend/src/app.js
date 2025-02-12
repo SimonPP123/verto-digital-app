@@ -5,7 +5,7 @@ const morgan = require('morgan');
 const passport = require('passport');
 const session = require('express-session');
 const Redis = require('redis');
-const RedisStore = require('connect-redis')(session);
+const RedisStore = require('connect-redis').default;
 const logger = require('./utils/logger');
 const { testConnection, initDatabase } = require('../config/db');
 
