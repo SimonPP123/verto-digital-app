@@ -9,9 +9,16 @@ const RedisStore = require('connect-redis').default;
 const logger = require('./utils/logger');
 const { testConnection, initDatabase } = require('../config/db');
 
-// Initialize Redis client
+// Initialize client
 const redisClient = createClient({
-  url: process.env.REDIS_URL || 'redis://localhost:6379'
+  url: process.env.REDIS_URL || 'redis://localhost:6379',
+  legacyMode: false
+});
+
+// Initialize store
+const redisStore = new RedisStore({
+  client: redisClient,
+  prefix: 'verto:sess:'
 });
 
 // Connect to Redis
@@ -19,39 +26,30 @@ const redisClient = createClient({
   await redisClient.connect().catch(console.error);
 })();
 
-// Initialize Redis store
-const redisStore = new RedisStore({
-  client: redisClient,
-  prefix: 'verto:sess:'
-});
-
 // Initialize Express
 const app = express();
 
 // Middleware Setup
 app.use(cors({
-  origin: ['http://localhost:3000', process.env.FRONTEND_URL],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: process.env.FRONTEND_URL || 'http://localhost:3100',
+  credentials: true
 }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(morgan('combined'));
+app.use(morgan('dev'));
 
-// Session configuration
+// Session configuration with Redis
 app.use(session({
-  secret: process.env.SESSION_SECRET,
+  store: redisStore,
+  secret: process.env.SESSION_SECRET || 'your-secret-key',
   resave: false,
   saveUninitialized: false,
   cookie: {
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    httpOnly: true
-  },
-  store: redisStore
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
 }));
 
 // Initialize Passport
@@ -67,34 +65,35 @@ app.use('/api', require('./routes/api'));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
+  res.json({ status: 'ok' });
 });
 
 // Global error handler
 app.use((err, req, res, next) => {
-  logger.error(err.stack);
+  console.error(err.stack);
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
 // Start the server
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5100;
 
-async function startServer() {
+const startServer = async () => {
   try {
     // Test database connection and initialize
     await testConnection();
     await initDatabase();
 
-    // Start the server
+    // Test Redis connection
+    await redisClient.ping();
+    console.log('Redis connection successful');
+    
     app.listen(PORT, () => {
       logger.info(`Server is running on port ${PORT}`);
     });
-  } catch (err) {
-    logger.error('Failed to start server:', err);
+  } catch (error) {
+    console.error('Error starting server:', error);
     process.exit(1);
   }
-}
+};
 
-startServer();
-
-module.exports = app; 
+startServer(); 
