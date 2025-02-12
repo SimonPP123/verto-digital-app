@@ -4,8 +4,25 @@ const cors = require('cors');
 const morgan = require('morgan');
 const passport = require('passport');
 const session = require('express-session');
+const RedisStore = require('connect-redis').default;
+const { createClient } = require('redis');
 const logger = require('./utils/logger');
 const { testConnection, initDatabase } = require('../config/db');
+
+// Initialize Redis client
+const redisClient = createClient({
+  url: process.env.REDIS_URL || 'redis://localhost:6379',
+  legacyMode: false
+});
+
+// Connect to Redis
+redisClient.connect().catch(console.error);
+
+// Initialize Redis store
+const redisStore = new RedisStore({
+  client: redisClient,
+  prefix: 'verto:sess:',
+});
 
 // Initialize Express
 const app = express();
@@ -22,8 +39,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('combined'));
 
-// Session configuration
+// Session configuration with Redis
 app.use(session({
+  store: redisStore,
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
