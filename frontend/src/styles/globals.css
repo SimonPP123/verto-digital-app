@@ -1,0 +1,38 @@
+/* Navigation Styles */
+.nav-link {
+  @apply px-3 py-2 text-sm font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50 transition-all rounded-md;
+}
+
+.nav-link.active {
+  @apply text-blue-600 border-b-2 border-blue-600;
+}
+
+/* Dropdown Menu */
+.dropdown-menu {
+  @apply absolute z-50 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none;
+}
+
+.dropdown-item {
+  @apply block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900;
+}
+
+/* Add animation for dropdown */
+@keyframes dropdownFade {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown-menu {
+  animation: dropdownFade 0.2s ease-out;
+}
+
+/* Close dropdown when clicking outside */
+.dropdown-overlay {
+  @apply fixed inset-0 z-40;
+} 

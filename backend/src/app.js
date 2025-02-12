@@ -5,14 +5,17 @@ const morgan = require('morgan');
 const passport = require('passport');
 const session = require('express-session');
 const logger = require('./utils/logger');
+const { testConnection, initDatabase } = require('../config/db');
 
 // Initialize Express
 const app = express();
 
 // Middleware Setup
 app.use(cors({
-  origin: process.env.FRONTEND_URL,
+  origin: ['http://localhost:3000', process.env.FRONTEND_URL],
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
@@ -26,8 +29,11 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    httpOnly: true
+  },
+  rolling: true // Resets the cookie expiration on every response
 }));
 
 // Initialize Passport
@@ -37,7 +43,7 @@ app.use(passport.session());
 // Load Passport configuration
 require('../config/passport')(passport);
 
-// Routes (we'll create these next)
+// Routes
 app.use('/auth', require('./routes/auth'));
 app.use('/api', require('./routes/api'));
 
@@ -53,9 +59,30 @@ app.use((err, req, res, next) => {
 });
 
 // Start the server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  logger.info(`Server is running on port ${PORT}`);
+const PORT = process.env.PORT || 5001;
+
+// Kill any existing process on port 5000 before starting
+const { exec } = require('child_process');
+exec(`lsof -i :${PORT} | grep LISTEN | awk '{print $2}' | xargs kill -9`, async (error) => {
+  if (error) {
+    logger.info(`No process was running on port ${PORT}`);
+  } else {
+    logger.info(`Killed process on port ${PORT}`);
+  }
+
+  try {
+    // Test database connection and initialize
+    await testConnection();
+    await initDatabase();
+
+    // Start the server
+    app.listen(PORT, () => {
+      logger.info(`Server is running on port ${PORT}`);
+    });
+  } catch (err) {
+    logger.error('Failed to start server:', err);
+    process.exit(1);
+  }
 });
 
 module.exports = app; 

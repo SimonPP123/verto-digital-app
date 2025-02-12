@@ -1,5 +1,6 @@
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const logger = require('../src/utils/logger');
+const User = require('../src/models/User');
 
 module.exports = function(passport) {
   passport.use(new GoogleStrategy({
@@ -18,20 +19,28 @@ module.exports = function(passport) {
         return done(null, false, { message: 'Only @vertodigital.com emails are allowed.' });
       }
 
-      // Here you would typically:
-      // 1. Check if user exists in database
-      // 2. If not, create new user
-      // 3. Return user object
+      // Find or create user
+      let user = await User.findOne({ where: { google_id: profile.id } });
       
-      // For now, we'll just return the profile
-      const user = {
-        id: profile.id,
-        email: email,
-        name: profile.displayName,
-        picture: profile.photos?.[0]?.value
-      };
+      if (!user) {
+        logger.info(`Creating new user for email: ${email}`);
+        user = await User.create({
+          google_id: profile.id,
+          email: email,
+          name: profile.displayName,
+          picture: profile.photos?.[0]?.value
+        });
+      } else {
+        // Update user information
+        user.last_login = new Date();
+        user.picture = profile.photos?.[0]?.value;
+        await user.save();
+      }
 
-      logger.info(`User logged in successfully: ${email}`);
+      logger.info(`User logged in successfully: ${email}`, {
+        userId: user.id,
+        googleId: user.google_id
+      });
       return done(null, user);
     } catch (error) {
       logger.error('Error in Google strategy:', error);
@@ -41,11 +50,29 @@ module.exports = function(passport) {
 
   // Serialize user for the session
   passport.serializeUser((user, done) => {
-    done(null, user);
+    logger.info(`Serializing user: ${user.email}`, {
+      userId: user.id,
+      googleId: user.google_id
+    });
+    done(null, user.id);
   });
 
   // Deserialize user from the session
-  passport.deserializeUser((user, done) => {
-    done(null, user);
+  passport.deserializeUser(async (id, done) => {
+    try {
+      const user = await User.findByPk(id);
+      if (!user) {
+        logger.error(`Failed to deserialize user: User with ID ${id} not found`);
+        return done(null, false);
+      }
+      logger.info(`Deserialized user: ${user.email}`, {
+        userId: user.id,
+        googleId: user.google_id
+      });
+      done(null, user);
+    } catch (error) {
+      logger.error('Error deserializing user:', error);
+      done(error, null);
+    }
   });
 }; 

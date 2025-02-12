@@ -1,5 +1,5 @@
 const { DataTypes } = require('sequelize');
-const sequelize = require('../../config/db');
+const { sequelize } = require('../../config/db');
 
 const User = sequelize.define('User', {
   id: {
@@ -7,7 +7,7 @@ const User = sequelize.define('User', {
     primaryKey: true,
     autoIncrement: true
   },
-  googleId: {
+  google_id: {
     type: DataTypes.STRING,
     allowNull: false,
     unique: true
@@ -33,16 +33,17 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: true
   },
-  lastLogin: {
+  last_login: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW
   }
 }, {
   timestamps: true,
+  underscored: true,
   indexes: [
     {
       unique: true,
-      fields: ['googleId']
+      fields: ['google_id']
     },
     {
       unique: true,

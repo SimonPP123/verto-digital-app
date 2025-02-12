@@ -1,3 +1,5 @@
+'use client';
+
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 interface User {
@@ -18,15 +20,26 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const checkAuth = async () => {
     try {
-      const response = await fetch('http://localhost:5000/auth/status', {
-        credentials: 'include'
+      const response = await fetch(`${API_URL}/auth/status`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        }
       });
+      
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      
       const data = await response.json();
       
       if (data.isAuthenticated) {
@@ -47,11 +60,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = () => {
-    window.location.href = 'http://localhost:5000/auth/google';
+    window.location.href = `${API_URL}/auth/google`;
   };
 
   const logout = () => {
-    window.location.href = 'http://localhost:5000/auth/logout';
+    window.location.href = `${API_URL}/auth/logout`;
   };
 
   return (
