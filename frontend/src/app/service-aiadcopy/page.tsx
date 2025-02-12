@@ -19,13 +19,13 @@ interface TableRow {
   [key: string]: string;
 }
 
+interface Variations {
+  [key: string]: string;
+}
+
 interface CollapsibleSectionProps {
   title: string;
   children: React.ReactNode;
-}
-
-interface Variations {
-  [key: string]: string;
 }
 
 function CollapsibleSection({ title, children }: CollapsibleSectionProps) {
@@ -74,8 +74,8 @@ const uploadFile = async (file: File): Promise<FileUploadResponse> => {
 export default function AdCopyServicePage() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [result, setResult] = useState<Variations | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<Variations | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
   const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>([]);
@@ -252,7 +252,7 @@ export default function AdCopyServicePage() {
         // Filter out null values
         const filteredVariations = Object.fromEntries(
           Object.entries(data.variations)
-            .filter(([_, value]) => value !== null && typeof value === 'string' && !value.includes('Not generated'))
+            .filter(([key, value]) => value !== null && typeof value === 'string' && !value.includes('Not generated'))
         ) as Variations;
         setResult(filteredVariations);
       } else {
@@ -542,58 +542,4 @@ export default function AdCopyServicePage() {
       </div>
     </div>
   );
-}
-
-// Helper function to format markdown text
-function formatMarkdownText(text: string): React.ReactNode {
-  // Split text into segments that are either bold or regular text
-  const segments = text.split(/(\*\*.*?\*\*)/g);
-  
-  return segments.map((segment, index) => {
-    // Handle bold text
-    if (segment.startsWith('**') && segment.endsWith('**')) {
-      return (
-        <strong key={index} className="font-semibold">
-          {segment.slice(2, -2)}
-        </strong>
-      );
-    }
-    
-    // Handle italics
-    if (segment.startsWith('*') && segment.endsWith('*')) {
-      return (
-        <em key={index} className="italic">
-          {segment.slice(1, -1)}
-        </em>
-      );
-    }
-    
-    // Handle inline code
-    if (segment.startsWith('`') && segment.endsWith('`')) {
-      return (
-        <code key={index} className="px-1 py-0.5 bg-gray-100 rounded text-sm font-mono">
-          {segment.slice(1, -1)}
-        </code>
-      );
-    }
-
-    // Handle links
-    if (segment.match(/\[.*?\]\(.*?\)/)) {
-      const [, text, url] = segment.match(/\[(.*?)\]\((.*?)\)/) || [];
-      return (
-        <a 
-          key={index}
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-600 hover:text-blue-800 underline"
-        >
-          {text}
-        </a>
-      );
-    }
-    
-    // Regular text
-    return segment;
-  });
 } 

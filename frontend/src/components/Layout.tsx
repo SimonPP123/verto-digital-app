@@ -3,6 +3,7 @@
 import { ReactNode, useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import Link from 'next/link';
+import Image from 'next/image';
 
 interface LayoutProps {
   children: ReactNode;
@@ -215,10 +216,12 @@ export default function Layout({ children }: LayoutProps) {
                   <div className="hidden sm:flex items-center gap-2">
                     <span className="text-sm font-medium text-gray-700">{user?.name}</span>
                     {user?.picture && (
-                      <img
+                      <Image
                         src={user.picture}
                         alt={user.name}
-                        className="h-8 w-8 rounded-full border-2 border-gray-200"
+                        width={32}
+                        height={32}
+                        className="rounded-full border-2 border-gray-200"
                       />
                     )}
                   </div>
