@@ -14,12 +14,12 @@ const path = require('path');
 // Initialize Express
 const app = express();
 
-// Basic middleware that doesn't require DB connection
+// Basic middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('combined'));
 
-// CORS configuration
+// CORS configuration - IMPORTANT: This must be before session middleware
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
     ? [process.env.FRONTEND_URL]
@@ -34,53 +34,37 @@ app.use(cors(corsOptions));
 
 async function startServer() {
   try {
-    // Find available port
-    const preferredPort = parseInt(process.env.PORT) || 5000;
-    const port = await findAvailablePort(preferredPort);
-    
-    // Update .env with the new port if it's different
-    if (port !== preferredPort) {
-      const envPath = path.join(__dirname, '..', '.env');
-      let envContent = fs.readFileSync(envPath, 'utf8');
-      envContent = envContent.replace(
-        /PORT=\d+/,
-        `PORT=${port}`
-      );
-      fs.writeFileSync(envPath, envContent);
-      process.env.PORT = port.toString();
-    }
-
-    logger.info('Starting server with configuration:');
-    logger.info(`NODE_ENV: ${process.env.NODE_ENV}`);
-    logger.info(`FRONTEND_URL: ${process.env.FRONTEND_URL}`);
-    logger.info(`PORT: ${port}`);
-
-    // Connect to MongoDB
+    // Connect to MongoDB first
+    logger.info('Connecting to MongoDB...');
     const mongoConnection = await connectDB();
-    logger.info('Setting up session store and authentication...');
+    logger.info('MongoDB connected successfully');
 
-    // Session configuration
+    // Session configuration - AFTER MongoDB connection
     app.use(session({
-      secret: process.env.SESSION_SECRET || 'default-secret-key',
+      secret: process.env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
       store: MongoStore.create({
         mongoUrl: process.env.MONGODB_URI,
+        collectionName: "sessions",
         ttl: 30 * 24 * 60 * 60, // 30 days
-        autoRemove: 'native',
-        touchAfter: 24 * 3600 // Only update session once per 24 hours unless data changes
+        autoRemove: "native",
+        touchAfter: 24 * 3600,
+        mongoOptions: {
+          useUnifiedTopology: true,
+          serverSelectionTimeoutMS: 10000
+        }
       }),
       cookie: {
-        secure: process.env.NODE_ENV === 'production',
+        secure: process.env.NODE_ENV === 'production', // true in production
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         httpOnly: true,
         domain: process.env.NODE_ENV === 'production' ? '.vertodigital.com' : undefined
-      },
-      rolling: true // Resets the cookie expiration on every response
+      }
     }));
 
-    // Initialize Passport
+    // Initialize Passport AFTER session middleware
     app.use(passport.initialize());
     app.use(passport.session());
 
@@ -95,8 +79,8 @@ async function startServer() {
     app.get('/api/health', (req, res) => {
       res.status(200).json({ 
         status: 'ok',
-        mongodb: 'connected',
-        port: port,
+        mongodb: mongoConnection.connection.readyState === 1 ? 'connected' : 'disconnected',
+        env: process.env.NODE_ENV,
         timestamp: new Date().toISOString()
       });
     });
@@ -115,13 +99,12 @@ async function startServer() {
     });
 
     // Start the server
+    const port = process.env.PORT || 5001;
     const server = app.listen(port, () => {
       logger.info(`Server is running on port ${port}`);
+      logger.info(`Environment: ${process.env.NODE_ENV}`);
+      logger.info(`Frontend URL: ${process.env.FRONTEND_URL}`);
       logger.info('Server setup completed successfully');
-      
-      // Write port to a file for the frontend to read
-      const portFilePath = path.join(__dirname, '..', '..', 'frontend', '.env.development.local');
-      fs.writeFileSync(portFilePath, `NEXT_PUBLIC_API_URL=http://localhost:${port}\n`);
     });
 
     // Handle server errors
@@ -157,4 +140,4 @@ async function startServer() {
 
 startServer();
 
-module.exports = app; 
+module.exports = app;
