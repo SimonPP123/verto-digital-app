@@ -4,33 +4,15 @@ const cors = require('cors');
 const morgan = require('morgan');
 const passport = require('passport');
 const session = require('express-session');
-const { createClient } = require('redis');
-const RedisStore = require('connect-redis').default;
 const logger = require('./utils/logger');
-const { testConnection, initDatabase } = require('../config/db');
-
-// Initialize Redis client
-const redisClient = createClient({
-  url: process.env.REDIS_URL || 'redis://localhost:6379'
-});
-
-// Connect to Redis
-(async () => {
-  await redisClient.connect().catch(console.error);
-})();
-
-// Initialize Redis store
-const redisStore = new RedisStore({
-  client: redisClient,
-  prefix: 'verto:sess:'
-});
+const connectDB = require('../config/db');
 
 // Initialize Express
 const app = express();
 
 // Middleware Setup
 app.use(cors({
-  origin: ['http://localhost:3000', process.env.FRONTEND_URL],
+  origin: ['http://localhost:3000', 'http://localhost:3100', process.env.FRONTEND_URL],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -51,7 +33,7 @@ app.use(session({
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     httpOnly: true
   },
-  store: redisStore
+  rolling: true // Resets the cookie expiration on every response
 }));
 
 // Initialize Passport
@@ -79,11 +61,18 @@ app.use((err, req, res, next) => {
 // Start the server
 const PORT = process.env.PORT || 5001;
 
-async function startServer() {
+// Kill any existing process on port before starting
+const { exec } = require('child_process');
+exec(`lsof -i :${PORT} | grep LISTEN | awk '{print $2}' | xargs kill -9`, async (error) => {
+  if (error) {
+    logger.info(`No process was running on port ${PORT}`);
+  } else {
+    logger.info(`Killed process on port ${PORT}`);
+  }
+
   try {
-    // Test database connection and initialize
-    await testConnection();
-    await initDatabase();
+    // Connect to MongoDB
+    await connectDB();
 
     // Start the server
     app.listen(PORT, () => {
@@ -93,8 +82,6 @@ async function startServer() {
     logger.error('Failed to start server:', err);
     process.exit(1);
   }
-}
-
-startServer();
+});
 
 module.exports = app; 

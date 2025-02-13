@@ -1,55 +1,32 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../../config/db');
+const mongoose = require('mongoose');
 
-const User = sequelize.define('User', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
-  },
-  google_id: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true
+const userSchema = new mongoose.Schema({
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true
   },
   email: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true,
-    validate: {
-      isEmail: true,
-      isVertoDigital(value) {
-        if (!value.endsWith('@vertodigital.com')) {
-          throw new Error('Only @vertodigital.com email addresses are allowed');
-        }
-      }
-    }
+    type: String,
+    required: true,
+    unique: true
   },
   name: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true
   },
   picture: {
-    type: DataTypes.STRING,
-    allowNull: true
+    type: String
   },
-  last_login: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user'
   }
 }, {
-  timestamps: true,
-  underscored: true,
-  indexes: [
-    {
-      unique: true,
-      fields: ['google_id']
-    },
-    {
-      unique: true,
-      fields: ['email']
-    }
-  ]
+  timestamps: true
 });
+
+const User = mongoose.model('User', userSchema);
 
 module.exports = User; 

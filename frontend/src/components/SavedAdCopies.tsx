@@ -2,23 +2,23 @@ import { useState, useEffect } from 'react';
 import { format, isValid, parseISO } from 'date-fns';
 
 interface SavedAdCopy {
-  id: number;
-  campaignName: string;
-  inputChannels: string;
-  inputContentTypes: string;
+  _id: string;
+  campaign_name: string;
+  input_channels: string;
+  input_content_types: string;
   createdAt: string;
 }
 
 interface SavedAdCopiesProps {
-  onSelect: (id: number) => void;
-  selectedId?: number;
+  onSelect: (id: string) => void;
+  selectedId?: string;
 }
 
 export default function SavedAdCopies({ onSelect, selectedId }: SavedAdCopiesProps) {
   const [savedCopies, setSavedCopies] = useState<SavedAdCopy[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   // Helper function to safely format dates
   const formatDate = (dateString: string | null | undefined): string => {
@@ -50,7 +50,7 @@ export default function SavedAdCopies({ onSelect, selectedId }: SavedAdCopiesPro
     }
   };
 
-  const handleDelete = async (id: number, e: React.MouseEvent) => {
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent triggering the parent button click
     
     if (!confirm('Are you sure you want to delete this ad copy?')) {
@@ -69,7 +69,7 @@ export default function SavedAdCopies({ onSelect, selectedId }: SavedAdCopiesPro
       }
 
       // Remove the deleted ad copy from the state
-      setSavedCopies(prev => prev.filter(copy => copy.id !== id));
+      setSavedCopies(prev => prev.filter(copy => copy._id !== id));
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to delete ad copy');
     } finally {
@@ -143,27 +143,27 @@ export default function SavedAdCopies({ onSelect, selectedId }: SavedAdCopiesPro
       <div className="space-y-4 p-4">
         {savedCopies.map((copy) => (
           <div
-            key={copy.id}
+            key={copy._id}
             className={`relative group rounded-lg border transition-all ${
-              selectedId === copy.id
+              selectedId === copy._id
                 ? 'border-blue-500 bg-blue-50'
                 : 'border-gray-200 hover:border-blue-300'
             }`}
           >
             <button
-              onClick={() => onSelect(copy.id)}
+              onClick={() => onSelect(copy._id)}
               className="w-full text-left p-4"
             >
               <h3 className="font-medium text-gray-900 truncate pr-8">
-                {copy.campaignName || 'Untitled Campaign'}
+                {copy.campaign_name || 'Untitled Campaign'}
               </h3>
               <p className="text-sm text-gray-500 mt-1">
                 {formatDate(copy.createdAt)}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {getChannels(copy.inputChannels).map((channel) => (
+                {getChannels(copy.input_channels).map((channel) => (
                   <span
-                    key={channel}
+                    key={`${copy._id}-${channel}`}
                     className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
                   >
                     {channel}
@@ -172,13 +172,13 @@ export default function SavedAdCopies({ onSelect, selectedId }: SavedAdCopiesPro
               </div>
             </button>
             <button
-              onClick={(e) => handleDelete(copy.id, e)}
-              disabled={isDeleting === copy.id}
+              onClick={(e) => handleDelete(copy._id, e)}
+              disabled={isDeleting === copy._id}
               className={`absolute top-4 right-4 p-1.5 rounded-full 
-                ${isDeleting === copy.id ? 'bg-gray-100 cursor-not-allowed' : 'opacity-0 group-hover:opacity-100 hover:bg-red-100'}
+                ${isDeleting === copy._id ? 'bg-gray-100 cursor-not-allowed' : 'opacity-0 group-hover:opacity-100 hover:bg-red-100'}
                 transition-all duration-200`}
             >
-              {isDeleting === copy.id ? (
+              {isDeleting === copy._id ? (
                 <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>

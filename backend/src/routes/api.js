@@ -10,8 +10,18 @@ const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) {
     return next();
   }
-  res.status(401).json({ error: 'Unauthorized' });
+  res.status(401).json({ error: 'Not authenticated' });
 };
+
+// Health check endpoint
+router.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+// Get user profile
+router.get('/profile', isAuthenticated, (req, res) => {
+  res.json(req.user);
+});
 
 // Dify API proxy
 router.post('/dify/run', isAuthenticated, async (req, res) => {
@@ -146,7 +156,7 @@ router.post('/dify/adcopy', isAuthenticated, async (req, res) => {
 
         // Save the ad copy to database
         const adCopy = await AdCopy.create({
-          user_id: req.user.id,
+          user: req.user._id,
           campaign_name: req.body.inputs.campaign_name,
           input_channels: req.body.inputs.input_channels,
           input_content_types: req.body.inputs.input_content_types,
@@ -166,9 +176,23 @@ router.post('/dify/adcopy', isAuthenticated, async (req, res) => {
         // Only return variations that are not null and don't contain the error message
         const filteredOutputs = {};
         for (const [key, value] of Object.entries(processedOutputs)) {
-          if (value && typeof value === 'string' && !value.includes('Not generated')) {
+          if (value && 
+              typeof value === 'string' && 
+              value.trim() !== '' && 
+              !value.includes('Not generated') &&
+              !value.includes('null') &&
+              !value.includes('undefined')) {
             filteredOutputs[key] = value;
           }
+        }
+
+        // Check if we have any valid outputs
+        if (Object.keys(filteredOutputs).length === 0) {
+          logger.warn('No valid content was generated');
+          return res.status(422).json({
+            error: 'No valid content was generated',
+            message: 'The AI model did not generate any valid content. Please try again with different inputs.'
+          });
         }
 
         res.json(filteredOutputs);
@@ -220,115 +244,83 @@ router.post('/dify/adcopy', isAuthenticated, async (req, res) => {
   }
 });
 
-// Get user's saved ad copies
+// Get saved ad copies
 router.get('/adcopy/saved', isAuthenticated, async (req, res) => {
   try {
     logger.info('Fetching saved ad copies for user:', {
-      userId: req.user.id,
+      userId: req.user._id,
       userEmail: req.user.email
     });
 
-    const savedCopies = await AdCopy.findAll({
-      where: { user_id: req.user.id },
-      order: [['created_at', 'DESC']],
-      attributes: ['id', 'campaign_name', 'input_channels', 'input_content_types', 'created_at']
-    });
+    const adCopies = await AdCopy.find({ user: req.user._id })
+      .sort({ createdAt: -1 });
 
-    logger.info('Found saved ad copies:', {
-      count: savedCopies.length
-    });
-
-    // Transform the response to match frontend expectations
-    const transformedCopies = savedCopies.map(copy => ({
-      id: copy.id,
-      campaignName: copy.campaign_name,
-      inputChannels: copy.input_channels,
-      inputContentTypes: copy.input_content_types,
-      createdAt: copy.created_at
-    }));
-
-    res.json(transformedCopies);
+    res.json(adCopies);
   } catch (error) {
     logger.error('Error fetching saved ad copies:', {
       error: error.message,
-      stack: error.stack,
-      userId: req.user?.id
+      userId: req.user._id,
+      stack: error.stack
     });
-    res.status(500).json({
-      error: 'Failed to fetch saved ad copies',
-      details: error.message
-    });
+    res.status(500).json({ error: 'Failed to fetch saved ad copies' });
   }
 });
 
-// Get specific saved ad copy
+// Get specific ad copy
 router.get('/adcopy/:id', isAuthenticated, async (req, res) => {
   try {
     const adCopy = await AdCopy.findOne({
-      where: {
-        id: req.params.id,
-        user_id: req.user.id
-      }
+      _id: req.params.id,
+      user: req.user._id
     });
 
     if (!adCopy) {
       return res.status(404).json({ error: 'Ad copy not found' });
     }
 
-    // Transform the response to match frontend expectations
-    const transformedCopy = {
-      id: adCopy.id,
-      campaignName: adCopy.campaign_name,
-      inputChannels: adCopy.input_channels,
-      inputContentTypes: adCopy.input_content_types,
-      variations: adCopy.variations,
-      landingPageContent: adCopy.landing_page_content,
-      contentMaterial: adCopy.content_material,
-      additionalInformation: adCopy.additional_information,
-      keywords: adCopy.keywords,
-      internalKnowledge: adCopy.internal_knowledge,
-      assetLink: adCopy.asset_link,
-      landingPageUrl: adCopy.landing_page_url,
-      toneAndLanguage: adCopy.tone_and_language,
-      createdAt: adCopy.created_at
-    };
-
-    res.json(transformedCopy);
+    res.json(adCopy);
   } catch (error) {
     logger.error('Error fetching ad copy:', error);
-    res.status(500).json({
-      error: 'Failed to fetch ad copy',
-      details: error.message
-    });
+    res.status(500).json({ error: 'Failed to fetch ad copy' });
   }
 });
 
-// Delete specific saved ad copy
-router.delete('/adcopy/:id', isAuthenticated, async (req, res) => {
+// Update ad copy
+router.put('/adcopy/:id', isAuthenticated, async (req, res) => {
   try {
-    const result = await AdCopy.destroy({
-      where: {
-        id: req.params.id,
-        user_id: req.user.id
-      }
-    });
+    const adCopy = await AdCopy.findOneAndUpdate(
+      { _id: req.params.id, user: req.user._id },
+      req.body,
+      { new: true }
+    );
 
-    if (result === 0) {
+    if (!adCopy) {
       return res.status(404).json({ error: 'Ad copy not found' });
     }
 
-    logger.info(`Ad copy deleted successfully: ${req.params.id}`, {
-      userId: req.user.id,
-      adCopyId: req.params.id
+    res.json(adCopy);
+  } catch (error) {
+    logger.error('Error updating ad copy:', error);
+    res.status(500).json({ error: 'Failed to update ad copy' });
+  }
+});
+
+// Delete ad copy
+router.delete('/adcopy/:id', isAuthenticated, async (req, res) => {
+  try {
+    const adCopy = await AdCopy.findOneAndDelete({
+      _id: req.params.id,
+      user: req.user._id
     });
+
+    if (!adCopy) {
+      return res.status(404).json({ error: 'Ad copy not found' });
+    }
 
     res.json({ message: 'Ad copy deleted successfully' });
   } catch (error) {
     logger.error('Error deleting ad copy:', error);
-    res.status(500).json({
-      error: 'Failed to delete ad copy',
-      details: error.message
-    });
+    res.status(500).json({ error: 'Failed to delete ad copy' });
   }
 });
 
