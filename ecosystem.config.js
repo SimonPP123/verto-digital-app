@@ -2,7 +2,8 @@ module.exports = {
   apps: [
     {
       name: 'verto-backend',
-      script: '/home/simeonpenev/VertoDigital Web App/backend/src/app.js',
+      cwd: '/home/simeonpenev/VertoDigital\\ Web\\ App/backend',
+      script: 'src/app.js',
       instances: 1,
       autorestart: true,
       watch: false,
@@ -14,7 +15,7 @@ module.exports = {
     },
     {
       name: 'verto-frontend',
-      cwd: '/home/simeonpenev/VertoDigital Web App/frontend',
+      cwd: '/home/simeonpenev/VertoDigital\\ Web\\ App/frontend',
       script: 'npm',
       args: 'start',
       instances: 1,
