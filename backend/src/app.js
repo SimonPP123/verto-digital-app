@@ -37,7 +37,7 @@ async function startServer() {
   try {
     // Connect to MongoDB first
     logger.info('Connecting to MongoDB...');
-    await connectDB();
+    const mongoConnection = await connectDB();
     logger.info('MongoDB connected successfully');
 
     // Session configuration - AFTER MongoDB connection
@@ -46,15 +46,11 @@ async function startServer() {
       resave: false,
       saveUninitialized: false,
       store: MongoStore.create({
-        mongoUrl: process.env.MONGODB_URI,
+        client: mongoConnection.connection.getClient(),
         collectionName: "sessions",
         ttl: 30 * 24 * 60 * 60, // 30 days
         autoRemove: "native",
-        touchAfter: 24 * 3600,
-        mongoOptions: {
-          useUnifiedTopology: true,
-          serverSelectionTimeoutMS: 10000
-        }
+        touchAfter: 24 * 3600
       }),
       cookie: {
         secure: process.env.NODE_ENV === 'production', // true in production
@@ -72,12 +68,13 @@ async function startServer() {
     // Load Passport configuration
     require('../config/passport')(passport);
 
-    // Routes - all under /api prefix
-    app.use('/api/auth', require('./routes/auth'));
-    app.use('/api', require('./routes/api'));
+    // Routes configuration
+    const apiRouter = express.Router();
+    apiRouter.use('/auth', require('./routes/auth'));
+    apiRouter.use('/', require('./routes/api'));
 
     // Health check endpoint
-    app.get('/api/health', (req, res) => {
+    apiRouter.get('/health', (req, res) => {
       res.status(200).json({ 
         status: 'ok',
         mongodb: 'connected',
@@ -85,6 +82,9 @@ async function startServer() {
         timestamp: new Date().toISOString()
       });
     });
+
+    // Mount all routes under /api
+    app.use('/api', apiRouter);
 
     // Global error handler
     app.use((err, req, res, next) => {
