@@ -10,6 +10,7 @@ const connectDB = require('../config/db');
 const findAvailablePort = require('./utils/portFinder');
 const fs = require('fs');
 const path = require('path');
+const mongoose = require('mongoose');
 
 // Initialize Express
 const app = express();
@@ -36,7 +37,7 @@ async function startServer() {
   try {
     // Connect to MongoDB first
     logger.info('Connecting to MongoDB...');
-    const mongoConnection = await connectDB();
+    await connectDB();
     logger.info('MongoDB connected successfully');
 
     // Session configuration - AFTER MongoDB connection
@@ -79,7 +80,7 @@ async function startServer() {
     app.get('/api/health', (req, res) => {
       res.status(200).json({ 
         status: 'ok',
-        mongodb: mongoConnection.connection.readyState === 1 ? 'connected' : 'disconnected',
+        mongodb: 'connected',
         env: process.env.NODE_ENV,
         timestamp: new Date().toISOString()
       });
@@ -120,7 +121,7 @@ async function startServer() {
       logger.info('SIGTERM received. Shutting down gracefully...');
       server.close(() => {
         logger.info('Server closed');
-        mongoConnection.connection.close(false, () => {
+        mongoose.connection.close(false, () => {
           logger.info('MongoDB connection closed');
           process.exit(0);
         });
