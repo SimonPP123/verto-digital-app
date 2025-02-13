@@ -256,19 +256,56 @@ export default function AdCopyServicePage() {
       }
 
       const data = await response.json();
+      console.log('Loaded ad copy data:', data);
       
       // Update form fields with saved data
       setCampaignName(data.campaign_name || '');
-      setSelectedChannels(data.input_channels ? data.input_channels.split(',') : []);
-      setSelectedContentTypes(data.input_content_types ? data.input_content_types.split(',') : []);
-      setAdditionalInfo(data.input_additional_info || '');
-      setCompetitorInfo(data.input_competitor_info || '');
-      setTargetAudience(data.input_target_audience || '');
-      setToneOfVoice(data.input_tone_of_voice || '');
-      setUniqueSellingPoints(data.input_unique_selling_points || '');
-      setGeneratedCopy(data.generated_copy || '');
+      setSelectedChannels(data.input_channels ? data.input_channels.split(',').map((c: string) => c.trim()) : []);
+      setSelectedContentTypes(data.input_content_types ? data.input_content_types.split(',').map((c: string) => c.trim()) : []);
+      setLandingPageContent(data.landing_page_content || '');
+      setLandingPageUrl(data.landing_page_url || '');
+      setAdditionalInfo(data.additional_information || '');
+      setCompetitorInfo(data.competitor_info || '');
+      setTargetAudience(data.target_audience || '');
+      setToneOfVoice(data.tone_and_language || '');
+      setUniqueSellingPoints(data.unique_selling_points || '');
+      
+      // Handle the generated copy
+      if (data.variations) {
+        console.log('Variations data:', data.variations);
+        // Convert Map to object if necessary
+        const variationsObject = data.variations instanceof Map 
+          ? Object.fromEntries(data.variations)
+          : data.variations;
+        
+        // Process the variations object
+        const processedVariations: Variations = {};
+        for (const [key, value] of Object.entries(variationsObject)) {
+          if (value && typeof value === 'string') {
+            processedVariations[key] = value;
+          }
+        }
+        
+        console.log('Processed variations:', processedVariations);
+        setResult(processedVariations);
+      } else if (data.generated_copy) {
+        console.log('Generated copy data:', data.generated_copy);
+        try {
+          const parsedCopy = typeof data.generated_copy === 'string'
+            ? JSON.parse(data.generated_copy)
+            : data.generated_copy;
+          setResult(parsedCopy);
+        } catch (e) {
+          console.error('Error parsing generated copy:', e);
+          setResult(data.generated_copy);
+        }
+      } else {
+        console.log('No variations or generated copy found in the data');
+        setResult(null);
+      }
       
     } catch (err) {
+      console.error('Error loading ad copy:', err);
       setError(err instanceof Error ? err.message : 'An error occurred while loading the saved ad copy');
     } finally {
       setIsLoading(false);
@@ -323,6 +360,8 @@ export default function AdCopyServicePage() {
               type="text"
               name="campaign_name"
               id="campaign_name"
+              value={campaignName}
+              onChange={(e) => setCampaignName(e.target.value)}
               required
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
             />
@@ -381,6 +420,8 @@ export default function AdCopyServicePage() {
             <textarea
               name="landing_page_content"
               id="landing_page_content"
+              value={landingPageContent}
+              onChange={(e) => setLandingPageContent(e.target.value)}
               rows={4}
               required
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
@@ -406,6 +447,8 @@ export default function AdCopyServicePage() {
             <textarea
               name="additional_information"
               id="additional_information"
+              value={additionalInfo}
+              onChange={(e) => setAdditionalInfo(e.target.value)}
               rows={3}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
             />
@@ -456,6 +499,8 @@ export default function AdCopyServicePage() {
               type="url"
               name="landing_page_url"
               id="landing_page_url"
+              value={landingPageUrl}
+              onChange={(e) => setLandingPageUrl(e.target.value)}
               required
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
             />
@@ -468,6 +513,8 @@ export default function AdCopyServicePage() {
             <select
               name="tone_and_language"
               id="tone_and_language"
+              value={toneOfVoice}
+              onChange={(e) => setToneOfVoice(e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
             >
               <option value="" className="text-gray-900">Select tone</option>
@@ -509,23 +556,62 @@ export default function AdCopyServicePage() {
         </form>
 
         {result && (
-          <div className="mt-8 p-4 bg-white rounded-lg shadow">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Generated Ad Copy</h2>
-            <div className="space-y-4">
-              {Object.entries(result).map(([key, value]) => (
-                <CollapsibleSection 
-                  key={key} 
-                  title={key}
-                >
-                  <div className="prose max-w-none">
-                    {value ? (
-                      <p className="text-gray-700 whitespace-pre-wrap">{value}</p>
-                    ) : (
-                      <p className="text-gray-500 italic">No content generated</p>
-                    )}
-                  </div>
-                </CollapsibleSection>
-              ))}
+          <div className="mt-8 space-y-6">
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Generated Ad Copies</h2>
+              
+              {Object.entries(result).map(([key, value]) => {
+                // Skip if value is null or empty
+                if (!value) return null;
+
+                // Helper function to get the platform name
+                const getPlatformName = (key: string) => {
+                  if (key.startsWith('G /')) return 'Google Search Ads';
+                  if (key.startsWith('LI /')) return 'LinkedIn Ads';
+                  if (key.startsWith('FB/IG')) return 'Facebook/Instagram Ads';
+                  if (key.startsWith('Reddit')) return 'Reddit Ads';
+                  if (key.startsWith('Twitter')) return 'Twitter Ads';
+                  if (key.startsWith('Email')) return 'Email';
+                  return key;
+                };
+
+                // Helper function to get the content type
+                const getContentType = (key: string) => {
+                  if (key.includes('Single Image')) return 'Single Image';
+                  if (key.includes('Carousel')) return 'Carousel';
+                  if (key.includes('Conversation')) return 'Conversation';
+                  if (key.includes('Documents')) return 'Documents';
+                  if (key.includes('Search')) return 'Search';
+                  if (key.includes('Email')) return 'Email';
+                  return null;
+                };
+
+                // Helper function to get the title suffix
+                const getTitleSuffix = (key: string) => {
+                  const num = key.match(/\d+$/)?.[0] || '';
+                  if (key.includes('Carousel')) {
+                    return num === '1' ? 'Prep' : 'Ad Copies';
+                  }
+                  return `Variation ${num}`;
+                };
+
+                const platform = getPlatformName(key);
+                const contentType = getContentType(key);
+                const titleSuffix = getTitleSuffix(key);
+
+                return (
+                  <CollapsibleSection 
+                    key={key}
+                    title={`${platform}${contentType ? ` - ${contentType}` : ''} ${titleSuffix}`}
+                  >
+                    <div className="prose max-w-none">
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <div className="text-gray-700 whitespace-pre-wrap">{value}</div>
+                      </div>
+                    </div>
+                  </CollapsibleSection>
+                );
+              })}
             </div>
           </div>
         )}

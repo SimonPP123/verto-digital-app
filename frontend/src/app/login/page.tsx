@@ -1,18 +1,28 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function LoginPage() {
   const { login, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
       router.push('/');
     }
   }, [isAuthenticated, isLoading, router]);
+
+  useEffect(() => {
+    const error = searchParams.get('error');
+    const message = searchParams.get('message');
+    if (error === 'domain' && message) {
+      setErrorMessage(decodeURIComponent(message.replace(/\+/g, ' ')));
+    }
+  }, [searchParams]);
 
   if (isLoading) {
     return (
@@ -32,6 +42,11 @@ export default function LoginPage() {
           <p className="mt-2 text-center text-sm text-gray-600">
             Use your @vertodigital.com email to access the platform
           </p>
+          {errorMessage && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-sm text-red-600 text-center">{errorMessage}</p>
+            </div>
+          )}
         </div>
         <div className="mt-8 space-y-6">
           <button
