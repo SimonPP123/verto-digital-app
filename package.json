@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "connect-redis": "^8.0.1",
+    "redis": "^4.7.0"
+  }
+}

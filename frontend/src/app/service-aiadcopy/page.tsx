@@ -79,10 +79,17 @@ export default function AdCopyServicePage() {
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
   const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>([]);
-  const [selectedSavedId, setSelectedSavedId] = useState<number | undefined>(undefined);
+  const [selectedSavedId, setSelectedSavedId] = useState<string>();
   const [campaignName, setCampaignName] = useState('');
   const [landingPageContent, setLandingPageContent] = useState('');
   const [landingPageUrl, setLandingPageUrl] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [additionalInfo, setAdditionalInfo] = useState('');
+  const [competitorInfo, setCompetitorInfo] = useState('');
+  const [targetAudience, setTargetAudience] = useState('');
+  const [toneOfVoice, setToneOfVoice] = useState('');
+  const [uniqueSellingPoints, setUniqueSellingPoints] = useState('');
+  const [generatedCopy, setGeneratedCopy] = useState('');
 
   const inputChannels = [
     { value: 'Google', label: 'Google' },
@@ -234,9 +241,12 @@ export default function AdCopyServicePage() {
     }
   };
 
-  // Add function to load saved ad copy
-  const loadSavedAdCopy = async (id: number) => {
+  const loadSavedAdCopy = async (id: string) => {
     try {
+      setIsLoading(true);
+      setError(null);
+      setSelectedSavedId(id);
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/adcopy/${id}`, {
         credentials: 'include'
       });
@@ -247,41 +257,21 @@ export default function AdCopyServicePage() {
 
       const data = await response.json();
       
-      // Check if variations exist and set them directly
-      if (data.variations && typeof data.variations === 'object') {
-        // Filter out null values
-        const filteredVariations = Object.fromEntries(
-          Object.entries(data.variations)
-            .filter(([key, value]) => value !== null && typeof value === 'string' && !value.includes('Not generated'))
-        ) as Variations;
-        setResult(filteredVariations);
-      } else {
-        setResult(null);
-      }
+      // Update form fields with saved data
+      setCampaignName(data.campaign_name || '');
+      setSelectedChannels(data.input_channels ? data.input_channels.split(',') : []);
+      setSelectedContentTypes(data.input_content_types ? data.input_content_types.split(',') : []);
+      setAdditionalInfo(data.input_additional_info || '');
+      setCompetitorInfo(data.input_competitor_info || '');
+      setTargetAudience(data.input_target_audience || '');
+      setToneOfVoice(data.input_tone_of_voice || '');
+      setUniqueSellingPoints(data.input_unique_selling_points || '');
+      setGeneratedCopy(data.generated_copy || '');
       
-      setSelectedSavedId(id);
-      
-      // Set form data if it exists
-      if (data.campaignName) {
-        setCampaignName(data.campaignName);
-      }
-      if (data.inputChannels) {
-        const channels: string[] = data.inputChannels.split(',').map((c: string) => c.trim());
-        setSelectedChannels(channels);
-      }
-      if (data.inputContentTypes) {
-        const types: string[] = data.inputContentTypes.split(',').map((t: string) => t.trim());
-        setSelectedContentTypes(types);
-      }
-      if (data.landingPageContent) {
-        setLandingPageContent(data.landingPageContent);
-      }
-      if (data.landingPageUrl) {
-        setLandingPageUrl(data.landingPageUrl);
-      }
-    } catch (error) {
-      console.error('Error loading saved ad copy:', error);
-      setError(error instanceof Error ? error.message : 'Failed to load saved ad copy');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred while loading the saved ad copy');
+    } finally {
+      setIsLoading(false);
     }
   };
 

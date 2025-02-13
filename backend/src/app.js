@@ -4,6 +4,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const passport = require('passport');
 const session = require('express-session');
+const MongoStore = require('connect-mongo');
 const logger = require('./utils/logger');
 const connectDB = require('../config/db');
 
@@ -27,6 +28,11 @@ app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI,
+    ttl: 30 * 24 * 60 * 60, // 30 days
+    autoRemove: 'native'
+  }),
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
@@ -61,27 +67,32 @@ app.use((err, req, res, next) => {
 // Start the server
 const PORT = process.env.PORT || 5001;
 
-// Kill any existing process on port before starting
-const { exec } = require('child_process');
-exec(`lsof -i :${PORT} | grep LISTEN | awk '{print $2}' | xargs kill -9`, async (error) => {
-  if (error) {
-    logger.info(`No process was running on port ${PORT}`);
-  } else {
-    logger.info(`Killed process on port ${PORT}`);
-  }
-
+const startServer = async () => {
   try {
-    // Connect to MongoDB
+    // Connect to MongoDB first
     await connectDB();
-
-    // Start the server
-    app.listen(PORT, () => {
+    
+    // Create HTTP server
+    const server = app.listen(PORT, () => {
       logger.info(`Server is running on port ${PORT}`);
     });
+
+    // Handle server errors
+    server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        logger.error(`Port ${PORT} is already in use`);
+        process.exit(1);
+      } else {
+        logger.error('Server error:', error);
+      }
+    });
+
   } catch (err) {
     logger.error('Failed to start server:', err);
     process.exit(1);
   }
-});
+};
+
+startServer();
 
 module.exports = app; 
