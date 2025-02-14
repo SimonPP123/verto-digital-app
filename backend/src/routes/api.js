@@ -26,7 +26,7 @@ router.get('/profile', isAuthenticated, (req, res) => {
 // Dify API proxy
 router.post('/dify/run', isAuthenticated, async (req, res) => {
   try {
-    const response = await axios.post('https://dify.vertodigital.com/v1/workflows/run', req.body, {
+    const response = await axios.post('https://dify.vertodigital.com:5100/v1/workflows/run', req.body, {
       headers: {
         'Authorization': `Bearer ${process.env.DIFY_API_KEY}`,
         'Content-Type': 'application/json'
@@ -69,7 +69,7 @@ router.post('/dify/adcopy', isAuthenticated, async (req, res) => {
     });
 
     // Initial request to start the workflow
-    const response = await axios.post('https://dify.vertodigital.com/v1/workflows/run', difyRequest, {
+    const response = await axios.post('https://dify.vertodigital.com:5100/v1/workflows/run', difyRequest, {
       headers: {
         'Authorization': `Bearer ${process.env.DIFY_API_KEY}`,
         'Content-Type': 'application/json'
