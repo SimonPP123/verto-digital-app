@@ -33,6 +33,9 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+// Trust proxy settings
+app.set('trust proxy', 1);
+
 async function startServer() {
   try {
     // Connect to MongoDB first
@@ -46,18 +49,22 @@ async function startServer() {
       resave: false,
       saveUninitialized: false,
       store: MongoStore.create({
-        client: mongoConnection.connection.getClient(),
+        mongoUrl: process.env.MONGODB_URI,
         collectionName: "sessions",
         ttl: 30 * 24 * 60 * 60, // 30 days
         autoRemove: "native",
-        touchAfter: 24 * 3600
+        touchAfter: 24 * 3600,
+        crypto: {
+          secret: process.env.SESSION_SECRET
+        }
       }),
       cookie: {
         secure: process.env.NODE_ENV === 'production', // true in production
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         httpOnly: true,
-        domain: process.env.NODE_ENV === 'production' ? '.vertodigital.com' : undefined
+        domain: process.env.NODE_ENV === 'production' ? '.vertodigital.com' : undefined,
+        path: '/'
       }
     }));
 
