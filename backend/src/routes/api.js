@@ -4,6 +4,8 @@ const router = express.Router();
 const logger = require('../utils/logger');
 const adCopySchema = require('../schemas/adCopySchema');
 const AdCopy = require('../models/AdCopy');
+const templateSchema = require('../schemas/templateSchema');
+const Template = require('../models/Template');
 
 // Middleware to check if user is authenticated
 const isAuthenticated = (req, res, next) => {
@@ -159,7 +161,6 @@ router.post('/dify/adcopy', isAuthenticated, async (req, res) => {
           user: req.user._id,
           campaign_name: req.body.inputs.campaign_name,
           input_channels: req.body.inputs.input_channels,
-          input_content_types: req.body.inputs.input_content_types,
           variations: processedOutputs,
           landing_page_content: req.body.inputs.landing_page_content,
           content_material: req.body.inputs.content_material || '',
@@ -354,6 +355,82 @@ router.post('/upload', isAuthenticated, async (req, res) => {
   } catch (error) {
     logger.error('File upload error:', error);
     res.status(500).json({ error: 'Failed to upload file' });
+  }
+});
+
+// Get templates
+router.get('/templates', isAuthenticated, async (req, res) => {
+  try {
+    logger.info('Fetching templates for user:', {
+      userId: req.user._id,
+      userEmail: req.user.email
+    });
+
+    const templates = await Template.find({ user: req.user._id })
+      .sort({ createdAt: -1 });
+
+    res.json(templates);
+  } catch (error) {
+    logger.error('Error fetching templates:', {
+      error: error.message,
+      userId: req.user._id,
+      stack: error.stack
+    });
+    res.status(500).json({ error: 'Failed to fetch templates' });
+  }
+});
+
+// Create template
+router.post('/templates', isAuthenticated, async (req, res) => {
+  try {
+    // Validate request body
+    const { error } = templateSchema.validate({
+      ...req.body,
+      user: req.user._id
+    });
+
+    if (error) {
+      logger.error('Template validation error:', error.details);
+      return res.status(400).json({
+        error: 'Invalid template format',
+        details: error.details[0].message
+      });
+    }
+
+    // Create template
+    const template = await Template.create({
+      ...req.body,
+      user: req.user._id
+    });
+
+    logger.info(`Template saved to database with ID: ${template.id}`);
+    res.status(201).json(template);
+  } catch (error) {
+    logger.error('Error creating template:', {
+      error: error.message,
+      userId: req.user._id,
+      stack: error.stack
+    });
+    res.status(500).json({ error: 'Failed to create template' });
+  }
+});
+
+// Delete template
+router.delete('/templates/:id', isAuthenticated, async (req, res) => {
+  try {
+    const template = await Template.findOneAndDelete({
+      _id: req.params.id,
+      user: req.user._id
+    });
+
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    res.json({ message: 'Template deleted successfully' });
+  } catch (error) {
+    logger.error('Error deleting template:', error);
+    res.status(500).json({ error: 'Failed to delete template' });
   }
 });
 

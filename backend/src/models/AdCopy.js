@@ -14,10 +14,6 @@ const adCopySchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  input_content_types: {
-    type: String,
-    required: true
-  },
   variations: {
     type: Map,
     of: mongoose.Schema.Types.Mixed,
