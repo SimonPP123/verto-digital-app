@@ -26,7 +26,8 @@ const templateSchema = new mongoose.Schema({
   keywords: String,
   internalKnowledge: String,
   assetLink: String,
-  toneAndLanguage: String
+  toneAndLanguage: String,
+  contentMaterial: String
 }, {
   timestamps: true
 });

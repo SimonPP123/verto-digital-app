@@ -8,8 +8,9 @@ const templateSchema = Joi.object({
   additionalInfo: Joi.string().allow(''),
   keywords: Joi.string().allow(''),
   internalKnowledge: Joi.string().allow(''),
-  assetLink: Joi.string().uri().allow(''),
+  assetLink: Joi.string().allow(''),
   toneAndLanguage: Joi.string().allow(''),
+  contentMaterial: Joi.string().allow(''),
   user: Joi.alternatives().try(
     Joi.string(),
     Joi.object()

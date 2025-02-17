@@ -23,7 +23,10 @@ const adCopySchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  content_material: String,
+  content_material: {
+    type: String,
+    default: ''
+  },
   additional_information: String,
   keywords: String,
   internal_knowledge: String,

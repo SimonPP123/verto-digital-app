@@ -46,6 +46,7 @@ interface Template {
   internalKnowledge: string;
   assetLink: string;
   toneAndLanguage: string;
+  contentMaterial: string;
 }
 
 function CollapsibleSection({ title, children }: CollapsibleSectionProps) {
@@ -252,7 +253,7 @@ const AdCopyServicePage: React.FC = () => {
       const data = await response.json();
       console.log('Loaded ad copy data:', data);
       
-      // Update form fields with saved data
+      // Update all form fields with saved data
       setCampaignName(data.campaign_name || '');
       setSelectedChannels(data.input_channels ? data.input_channels.split(',').map((c: string) => c.trim()) : []);
       setSelectedContentTypes(data.input_content_types ? data.input_content_types.split(',').map((c: string) => c.trim()) : []);
@@ -263,6 +264,19 @@ const AdCopyServicePage: React.FC = () => {
       setTargetAudience(data.target_audience || '');
       setToneOfVoice(data.tone_and_language || '');
       setUniqueSellingPoints(data.unique_selling_points || '');
+
+      // Set values directly for fields that use document.getElementById
+      const keywordsInput = document.getElementById('keywords') as HTMLTextAreaElement;
+      if (keywordsInput) keywordsInput.value = data.keywords || '';
+
+      const internalKnowledgeInput = document.getElementById('internal_knowledge') as HTMLTextAreaElement;
+      if (internalKnowledgeInput) internalKnowledgeInput.value = data.internal_knowledge || '';
+
+      const contentMaterialInput = document.getElementById('content_material') as HTMLTextAreaElement;
+      if (contentMaterialInput) contentMaterialInput.value = data.content_material || '';
+
+      const assetLinkInput = document.getElementById('asset_link') as HTMLInputElement;
+      if (assetLinkInput) assetLinkInput.value = data.asset_link || '';
       
       // Handle the generated copy
       if (data.variations) {
@@ -307,6 +321,7 @@ const AdCopyServicePage: React.FC = () => {
   };
 
   const clearForm = () => {
+    // Clear state-managed fields
     setCampaignName('');
     setLandingPageContent('');
     setLandingPageUrl('');
@@ -319,6 +334,19 @@ const AdCopyServicePage: React.FC = () => {
     setResult(null);
     setError(null);
     setFormError(null);
+
+    // Clear fields that use direct DOM access
+    const keywordsInput = document.getElementById('keywords') as HTMLTextAreaElement;
+    if (keywordsInput) keywordsInput.value = '';
+
+    const internalKnowledgeInput = document.getElementById('internal_knowledge') as HTMLTextAreaElement;
+    if (internalKnowledgeInput) internalKnowledgeInput.value = '';
+
+    const contentMaterialInput = document.getElementById('content_material') as HTMLTextAreaElement;
+    if (contentMaterialInput) contentMaterialInput.value = '';
+
+    const assetLinkInput = document.getElementById('asset_link') as HTMLInputElement;
+    if (assetLinkInput) assetLinkInput.value = '';
   };
 
   const loadTemplates = async () => {
@@ -370,15 +398,22 @@ const AdCopyServicePage: React.FC = () => {
         return;
       }
 
+      // Get values from DOM elements with proper type checking
+      const keywordsInput = document.getElementById('keywords') as HTMLTextAreaElement;
+      const internalKnowledgeInput = document.getElementById('internal_knowledge') as HTMLTextAreaElement;
+      const contentMaterialInput = document.getElementById('content_material') as HTMLTextAreaElement;
+      const assetLinkInput = document.getElementById('asset_link') as HTMLInputElement;
+
       const newTemplate = {
         name: templateName.trim(),
         campaignName,
         landingPageContent,
         landingPageUrl,
         additionalInfo,
-        keywords: (document.getElementById('keywords') as HTMLInputElement)?.value || '',
-        internalKnowledge: (document.getElementById('internal_knowledge') as HTMLInputElement)?.value || '',
-        assetLink: (document.getElementById('asset_link') as HTMLInputElement)?.value || '',
+        keywords: keywordsInput?.value || '',
+        internalKnowledge: internalKnowledgeInput?.value || '',
+        contentMaterial: contentMaterialInput?.value || '',
+        assetLink: assetLinkInput?.value || '',
         toneAndLanguage: toneOfVoice
       };
 
@@ -407,12 +442,24 @@ const AdCopyServicePage: React.FC = () => {
   };
 
   const applyTemplate = (template: Template) => {
-    setCampaignName(template.campaignName);
-    setLandingPageContent(template.landingPageContent);
-    setLandingPageUrl(template.landingPageUrl);
-    setAdditionalInfo(template.additionalInfo);
-    setToneOfVoice(template.toneAndLanguage);
-    // Add other field setters as needed
+    // Set state-managed fields
+    setCampaignName(template.campaignName || '');
+    setLandingPageContent(template.landingPageContent || '');
+    setLandingPageUrl(template.landingPageUrl || '');
+    setAdditionalInfo(template.additionalInfo || '');
+    setToneOfVoice(template.toneAndLanguage || '');
+
+    // Get DOM elements with proper type checking
+    const keywordsInput = document.getElementById('keywords') as HTMLTextAreaElement;
+    const internalKnowledgeInput = document.getElementById('internal_knowledge') as HTMLTextAreaElement;
+    const contentMaterialInput = document.getElementById('content_material') as HTMLTextAreaElement;
+    const assetLinkInput = document.getElementById('asset_link') as HTMLInputElement;
+
+    // Set values for DOM-based fields with null checks
+    if (keywordsInput) keywordsInput.value = template.keywords || '';
+    if (internalKnowledgeInput) internalKnowledgeInput.value = template.internalKnowledge || '';
+    if (contentMaterialInput) contentMaterialInput.value = template.contentMaterial || '';
+    if (assetLinkInput) assetLinkInput.value = template.assetLink || '';
   };
 
   const deleteTemplate = async (templateId: string) => {
@@ -486,7 +533,7 @@ const AdCopyServicePage: React.FC = () => {
             <div className="text-center">
               <div className="mb-8 aspect-video w-full max-w-4xl mx-auto rounded-lg overflow-hidden shadow-lg">
                 <iframe
-                  src="https://www.loom.com/embed/79720afad6a048e5a6850069c8137b70?sid=c40d4b78-c30c-4992-a5c7-d11e8d6c08e7"
+                  src="https://www.loom.com/embed/0d51a2a58f7a43218924f154e3f84e60?sid=954da684-b64c-4ed4-a065-36e5ef818a5a"
                   frameBorder="0"
                   allowFullScreen
                   className="w-full h-full"
