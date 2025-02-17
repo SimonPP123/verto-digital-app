@@ -8,31 +8,36 @@ const services = [
     title: 'SEO Content Brief',
     description: 'Generate comprehensive SEO content briefs with AI assistance',
     href: '/service-seo',
-    icon: '📝'
+    icon: '📝',
+    underConstruction: true
   },
   {
     title: 'Chat with Files',
     description: 'Interactive chat interface for document analysis and insights',
     href: '/service-chat',
-    icon: '💬'
+    icon: '💬',
+    underConstruction: true
   },
   {
     title: 'LinkedIn AI Audience',
     description: 'AI-powered LinkedIn audience targeting and analysis',
     href: '/service-linkedin',
-    icon: '👥'
+    icon: '👥',
+    underConstruction: true
   },
   {
     title: 'AI Ad Copy',
     description: 'Generate compelling ad copy using advanced AI',
     href: '/service-aiadcopy',
-    icon: '✍️'
+    icon: '✍️',
+    underConstruction: false
   },
   {
     title: 'GA4 Weekly Report',
     description: 'Automated GA4 analytics reports with AI insights',
     href: '/service-ga4report',
-    icon: '📊'
+    icon: '📊',
+    underConstruction: true
   }
 ];
 
@@ -76,6 +81,11 @@ export default function Home() {
           <p className="mt-4 text-xl text-gray-600">
             Select a service to get started
           </p>
+          <div className="mt-4 inline-block bg-orange-100 border border-orange-200 rounded-lg px-4 py-2">
+            <p className="text-sm text-orange-700">
+              🚧 Some services are currently under construction and will be available soon
+            </p>
+          </div>
         </div>
 
         <div className="mt-12 grid gap-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
@@ -86,6 +96,11 @@ export default function Home() {
               className="block group"
             >
               <div className="relative bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
+                {service.underConstruction && (
+                  <div className="absolute top-2 right-2 bg-orange-500 text-white text-xs px-2 py-1 rounded-full">
+                    Under Construction
+                  </div>
+                )}
                 <div className="text-4xl mb-4">{service.icon}</div>
                 <h3 className="text-lg font-medium text-gray-900 group-hover:text-blue-600">
                   {service.title}

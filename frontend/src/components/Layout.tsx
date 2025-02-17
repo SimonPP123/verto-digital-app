@@ -116,14 +116,20 @@ export default function Layout({ children }: LayoutProps) {
                             className="group flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                           >
                             <span className="mr-3">📝</span>
-                            SEO Content Brief
+                            <div className="flex-1 flex items-center justify-between">
+                              <span>SEO Content Brief</span>
+                              <span className="ml-2 px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">Under Construction</span>
+                            </div>
                           </Link>
                           <Link 
                             href="/service-chat" 
                             className="group flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                           >
                             <span className="mr-3">💬</span>
-                            Chat with Files
+                            <div className="flex-1 flex items-center justify-between">
+                              <span>Chat with Files</span>
+                              <span className="ml-2 px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">Under Construction</span>
+                            </div>
                           </Link>
                         </div>
                       </div>
@@ -158,7 +164,10 @@ export default function Layout({ children }: LayoutProps) {
                             className="group flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                           >
                             <span className="mr-3">👥</span>
-                            LinkedIn AI Audience
+                            <div className="flex-1 flex items-center justify-between">
+                              <span>LinkedIn AI Audience</span>
+                              <span className="ml-2 px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">Under Construction</span>
+                            </div>
                           </Link>
                           <Link 
                             href="/service-aiadcopy" 
@@ -200,7 +209,10 @@ export default function Layout({ children }: LayoutProps) {
                             className="group flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                           >
                             <span className="mr-3">📊</span>
-                            GA4 Weekly Report
+                            <div className="flex-1 flex items-center justify-between">
+                              <span>GA4 Weekly Report</span>
+                              <span className="ml-2 px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">Under Construction</span>
+                            </div>
                           </Link>
                         </div>
                       </div>
