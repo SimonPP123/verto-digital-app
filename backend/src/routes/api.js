@@ -485,42 +485,44 @@ router.post('/seo/content-brief', isAuthenticated, async (req, res) => {
 });
 
 // Receive processed SEO content brief from n8n
-router.post('/seo/content-brief/callback', async (req, res) => {
+router.post('/seo/content-brief/callback', express.text({ type: 'text/html' }), async (req, res) => {
   try {
     // Get raw body content
-    const content = req.body.toString();
+    const content = req.body;
     
     logger.info('Received processed SEO content brief from n8n:', {
       contentLength: content.length,
       contentType: req.get('Content-Type')
     });
 
-    // Extract userId from the most recent content brief request
-    const latestRequest = await ContentBrief.findOne()
-      .sort({ createdAt: -1 })
-      .select('user');
+    // Find and update the most recent content brief
+    const latestBrief = await ContentBrief.findOne()
+      .sort({ createdAt: -1 });
 
-    if (!latestRequest) {
+    if (!latestBrief) {
       throw new Error('No recent content brief request found');
     }
 
-    // Store the content brief
-    const contentBrief = await ContentBrief.create({
-      user: latestRequest.user,
-      content: content,
-      createdAt: new Date()
-    });
+    // Update the existing brief with the new content
+    const updatedBrief = await ContentBrief.findByIdAndUpdate(
+      latestBrief._id,
+      { 
+        content: content,
+        updatedAt: new Date()
+      },
+      { new: true }
+    );
 
-    logger.info('Stored content brief:', {
-      briefId: contentBrief._id,
-      userId: latestRequest.user
+    logger.info('Updated content brief:', {
+      briefId: updatedBrief._id,
+      userId: updatedBrief.user
     });
 
     // Return success to n8n
     res.json({
       success: true,
-      message: 'Content brief received and stored successfully',
-      briefId: contentBrief._id
+      message: 'Content brief updated successfully',
+      briefId: updatedBrief._id
     });
 
   } catch (error) {
@@ -545,6 +547,14 @@ router.get('/seo/content-brief/status', isAuthenticated, async (req, res) => {
       return res.json({
         status: 'processing',
         message: 'No content brief found'
+      });
+    }
+
+    // Check if content is still processing
+    if (latestBrief.content === 'Processing...') {
+      return res.json({
+        status: 'processing',
+        message: 'Content brief is being generated'
       });
     }
 
