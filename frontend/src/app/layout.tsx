@@ -7,7 +7,7 @@ import Layout from "../components/Layout";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Verto Digital Web App",
+  title: "VertoDigital Web App",
   description: "AI-powered tools for digital marketing",
 };
 

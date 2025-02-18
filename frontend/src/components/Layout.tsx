@@ -44,7 +44,7 @@ export default function Layout({ children }: LayoutProps) {
               <div className="flex-shrink-0">
                 <Link href="/" className="flex items-center">
                   <span className="text-xl font-bold text-blue-600 hover:text-blue-700 transition-colors">
-                    Verto Digital
+                    VertoDigital
                   </span>
                 </Link>
               </div>
@@ -60,7 +60,7 @@ export default function Layout({ children }: LayoutProps) {
       <footer className="bg-white shadow-lg mt-8">
         <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
           <p className="text-center text-gray-500">
-            © {new Date().getFullYear()} Verto Digital. All rights reserved.
+            © {new Date().getFullYear()} VertoDigital. All rights reserved.
           </p>
         </div>
       </footer>
@@ -81,7 +81,7 @@ export default function Layout({ children }: LayoutProps) {
               <div className="flex-shrink-0">
                 <Link href="/" className="flex items-center">
                   <span className="text-xl font-bold text-blue-600 hover:text-blue-700 transition-colors">
-                    Verto Digital
+                    VertoDigital
                   </span>
                 </Link>
               </div>
@@ -116,9 +116,8 @@ export default function Layout({ children }: LayoutProps) {
                             className="group flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                           >
                             <span className="mr-3">📝</span>
-                            <div className="flex-1 flex items-center justify-between">
+                            <div className="flex-1">
                               <span>SEO Content Brief</span>
-                              <span className="ml-2 px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">Under Construction</span>
                             </div>
                           </Link>
                           <Link 
@@ -264,7 +263,7 @@ export default function Layout({ children }: LayoutProps) {
       <footer className="bg-white shadow-lg mt-8">
         <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
           <p className="text-center text-gray-500">
-            © {new Date().getFullYear()} Verto Digital. All rights reserved.
+            © {new Date().getFullYear()} VertoDigital. All rights reserved.
           </p>
         </div>
       </footer>

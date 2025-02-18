@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import SavedContentBriefs from '../../components/SavedContentBriefs';
+import CollapsibleSection from '../../components/CollapsibleSection';
 
 export default function SEOServicePage() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -141,7 +142,7 @@ export default function SEOServicePage() {
             id="keyword"
             required
             placeholder="Write your keyword/topic here"
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900"
           />
         </div>
 
@@ -195,12 +196,16 @@ export default function SEOServicePage() {
       )}
 
       {brief && (
-        <div className="mt-8 p-6 bg-white rounded-lg shadow-lg border border-gray-200"
-             dangerouslySetInnerHTML={{ __html: brief }}>
-        </div>
+        <CollapsibleSection title="Generated Content Brief" defaultOpen={true}>
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6"
+               dangerouslySetInnerHTML={{ __html: brief }}>
+          </div>
+        </CollapsibleSection>
       )}
 
-      <SavedContentBriefs refreshTrigger={refreshBriefs} />
+      <CollapsibleSection title="Saved Content Briefs" defaultOpen={true}>
+        <SavedContentBriefs refreshTrigger={refreshBriefs} />
+      </CollapsibleSection>
     </div>
   );
 } 

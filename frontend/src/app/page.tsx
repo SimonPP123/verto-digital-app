@@ -9,7 +9,7 @@ const services = [
     description: 'Generate comprehensive SEO content briefs with AI assistance',
     href: '/service-seo',
     icon: '📝',
-    underConstruction: true
+    underConstruction: false
   },
   {
     title: 'Chat with Files',
