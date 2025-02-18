@@ -22,7 +22,7 @@ export default function SEOServicePage() {
           });
           const data = await response.json();
           
-          if (data.content) {
+          if (data.status === 'completed' && data.content) {
             setStatus('completed');
             setBrief(data.content);
             clearInterval(pollInterval);

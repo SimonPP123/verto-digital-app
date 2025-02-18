@@ -6,6 +6,7 @@ const adCopySchema = require('../schemas/adCopySchema');
 const AdCopy = require('../models/AdCopy');
 const templateSchema = require('../schemas/templateSchema');
 const Template = require('../models/Template');
+const ContentBrief = require('../models/ContentBrief');
 
 // Middleware to check if user is authenticated
 const isAuthenticated = (req, res, next) => {
@@ -477,27 +478,22 @@ router.post('/seo/content-brief/callback', async (req, res) => {
       contentReceived: !!content
     });
 
-    // Parse the content from text/html format
-    let processedContent;
-    try {
-      // If content is a string (HTML), parse it into an object
-      if (typeof content === 'string') {
-        processedContent = {
-          brief: content // Store the HTML content directly
-        };
-      } else {
-        processedContent = content;
-      }
-    } catch (error) {
-      logger.error('Error parsing content:', error);
-      processedContent = { brief: content }; // Store as is if parsing fails
-    }
+    // Store the content brief
+    const contentBrief = await ContentBrief.create({
+      user: userId,
+      content: content
+    });
+
+    logger.info('Stored content brief:', {
+      briefId: contentBrief._id,
+      userId
+    });
 
     // Return success to n8n
     res.json({
       success: true,
-      message: 'Content brief received successfully',
-      content: processedContent
+      message: 'Content brief received and stored successfully',
+      briefId: contentBrief._id
     });
 
   } catch (error) {
@@ -506,6 +502,34 @@ router.post('/seo/content-brief/callback', async (req, res) => {
       success: false,
       message: 'Failed to handle content brief callback',
       error: error.message
+    });
+  }
+});
+
+// Get content brief status
+router.get('/seo/content-brief/status', isAuthenticated, async (req, res) => {
+  try {
+    // Return the latest content brief for this user
+    const latestBrief = await ContentBrief.findOne({ 
+      user: req.user._id 
+    }).sort({ createdAt: -1 });
+
+    if (!latestBrief) {
+      return res.json({
+        status: 'processing',
+        message: 'No content brief found'
+      });
+    }
+
+    res.json({
+      status: 'completed',
+      content: latestBrief.content
+    });
+  } catch (error) {
+    logger.error('Error getting content brief status:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to get content brief status'
     });
   }
 });
