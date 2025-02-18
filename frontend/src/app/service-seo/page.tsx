@@ -25,6 +25,11 @@ export default function SEOServicePage() {
           if (data.status === 'completed' && data.content) {
             setStatus('completed');
             setBrief(data.content);
+            console.log('Content Brief Completed. Content received:', {
+              contentLength: data.content.length,
+              contentPreview: data.content.substring(0, 200) + '...',
+              fullContent: data.content
+            });
             clearInterval(pollInterval);
           }
         } catch (error) {
@@ -77,7 +82,7 @@ export default function SEOServicePage() {
 
   useEffect(() => {
     if (status === 'completed') {
-      setResult('Your SEO content brief has been successfully generated! You can find it below and in the Google Drive folder.');
+      setResult('Content Brief: Your SEO content brief has been successfully generated! You can find it below and in the Google Drive folder.');
     }
   }, [status]);
 
@@ -156,14 +161,14 @@ export default function SEOServicePage() {
           <h2 className="text-xl font-semibold text-gray-900 mb-4">
             {status === 'error' ? 'Error' : 
              status === 'processing' ? 'Processing' : 
-             'Result'}
+             'Success'}
           </h2>
           <div className="prose max-w-none">
             {result.split('\n').map((line, index) => (
               <p key={index} className={`mb-2 ${
                 status === 'error' ? 'text-red-600' : 
                 status === 'processing' ? 'text-yellow-600' : 
-                'text-green-600'
+                line.startsWith('Content Brief:') ? 'text-gray-900 font-semibold' : 'text-green-600'
               }`}>{line}</p>
             ))}
           </div>
