@@ -166,9 +166,8 @@ export default function SEOServicePage() {
 
       {brief && (
         <div className="mt-8 p-6 bg-white rounded-lg shadow-lg border border-gray-200">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Generated Content Brief</h2>
-          <div className="prose max-w-none" 
-               dangerouslySetInnerHTML={{ __html: typeof brief === 'string' ? brief : brief.brief || '' }}>
+          <div className="prose max-w-none prose-headings:text-gray-900 prose-p:text-gray-600" 
+               dangerouslySetInnerHTML={{ __html: brief }}>
           </div>
         </div>
       )}

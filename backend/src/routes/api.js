@@ -486,12 +486,22 @@ router.post('/seo/content-brief', isAuthenticated, async (req, res) => {
 router.post('/seo/content-brief/callback', express.text({ type: 'text/html' }), async (req, res) => {
   try {
     // Get raw body content
-    const content = req.body;
+    const rawContent = req.body;
     
     logger.info('Received processed SEO content brief from n8n:', {
-      contentLength: content.length,
+      contentLength: rawContent.length,
       contentType: req.get('Content-Type')
     });
+
+    // Format the content in the expected structure
+    const formattedContent = `
+      <div class="content-brief">
+        <h2>Content Brief:</h2>
+        <div class="brief-content">
+          ${rawContent}
+        </div>
+      </div>
+    `;
 
     // Find and update the most recent content brief
     const latestBrief = await ContentBrief.findOne()
@@ -505,7 +515,7 @@ router.post('/seo/content-brief/callback', express.text({ type: 'text/html' }), 
     const updatedBrief = await ContentBrief.findByIdAndUpdate(
       latestBrief._id,
       { 
-        content: content,
+        content: formattedContent,
         updatedAt: new Date()
       },
       { new: true }
