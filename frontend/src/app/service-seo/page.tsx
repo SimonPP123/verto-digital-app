@@ -191,10 +191,8 @@ export default function SEOServicePage() {
       )}
 
       {brief && (
-        <div className="mt-8 p-6 bg-white rounded-lg shadow-lg border border-gray-200">
-          <div className="prose max-w-none text-gray-900" 
-               dangerouslySetInnerHTML={{ __html: brief }}>
-          </div>
+        <div className="mt-8 p-6 bg-white rounded-lg shadow-lg border border-gray-200"
+             dangerouslySetInnerHTML={{ __html: brief }}>
         </div>
       )}
     </div>

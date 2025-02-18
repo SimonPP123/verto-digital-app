@@ -490,13 +490,15 @@ router.post('/seo/content-brief/callback', express.text({ type: 'text/html' }), 
     
     logger.info('Received processed SEO content brief from n8n:', {
       contentLength: rawContent.length,
-      contentType: req.get('Content-Type')
+      contentPreview: rawContent.substring(0, 200) + '...',
+      fullContent: rawContent
     });
 
-    // Format the content in the expected structure
+    // Format the content with proper classes
     const formattedContent = `
-        <h2>Content Brief:</h2>
-          ${rawContent}
+      <div class="prose max-w-none text-gray-900">
+        ${rawContent}
+      </div>
     `;
 
     // Find and update the most recent content brief
@@ -519,7 +521,10 @@ router.post('/seo/content-brief/callback', express.text({ type: 'text/html' }), 
 
     logger.info('Updated content brief:', {
       briefId: updatedBrief._id,
-      userId: updatedBrief.user
+      userId: updatedBrief.user,
+      contentLength: formattedContent.length,
+      contentPreview: formattedContent.substring(0, 200) + '...',
+      fullContent: formattedContent
     });
 
     // Return success to n8n
