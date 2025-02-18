@@ -495,12 +495,8 @@ router.post('/seo/content-brief/callback', express.text({ type: 'text/html' }), 
 
     // Format the content in the expected structure
     const formattedContent = `
-      <div class="content-brief">
         <h2>Content Brief:</h2>
-        <div class="brief-content">
           ${rawContent}
-        </div>
-      </div>
     `;
 
     // Find and update the most recent content brief
