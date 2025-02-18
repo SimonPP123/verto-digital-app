@@ -523,8 +523,7 @@ router.post('/seo/content-brief/callback', express.text({ type: 'text/html' }), 
       briefId: updatedBrief._id,
       userId: updatedBrief.user,
       contentLength: formattedContent.length,
-      contentPreview: formattedContent.substring(0, 200) + '...',
-      fullContent: formattedContent
+      contentPreview: formattedContent.substring(0, 200) + '...'
     });
 
     // Return success to n8n
@@ -577,6 +576,66 @@ router.get('/seo/content-brief/status', isAuthenticated, async (req, res) => {
       status: 'error',
       message: 'Failed to get content brief status'
     });
+  }
+});
+
+// Get saved content briefs
+router.get('/content-briefs/saved', isAuthenticated, async (req, res) => {
+  try {
+    logger.info('Fetching saved content briefs for user:', {
+      userId: req.user._id,
+      userEmail: req.user.email
+    });
+
+    const contentBriefs = await ContentBrief.find({ user: req.user._id })
+      .sort({ createdAt: -1 });
+
+    res.json(contentBriefs);
+  } catch (error) {
+    logger.error('Error fetching saved content briefs:', {
+      error: error.message,
+      userId: req.user._id,
+      stack: error.stack
+    });
+    res.status(500).json({ error: 'Failed to fetch saved content briefs' });
+  }
+});
+
+// Get specific content brief
+router.get('/content-briefs/:id', isAuthenticated, async (req, res) => {
+  try {
+    const contentBrief = await ContentBrief.findOne({
+      _id: req.params.id,
+      user: req.user._id
+    });
+
+    if (!contentBrief) {
+      return res.status(404).json({ error: 'Content brief not found' });
+    }
+
+    res.json(contentBrief);
+  } catch (error) {
+    logger.error('Error fetching content brief:', error);
+    res.status(500).json({ error: 'Failed to fetch content brief' });
+  }
+});
+
+// Delete content brief
+router.delete('/content-briefs/:id', isAuthenticated, async (req, res) => {
+  try {
+    const contentBrief = await ContentBrief.findOneAndDelete({
+      _id: req.params.id,
+      user: req.user._id
+    });
+
+    if (!contentBrief) {
+      return res.status(404).json({ error: 'Content brief not found' });
+    }
+
+    res.json({ message: 'Content brief deleted successfully' });
+  } catch (error) {
+    logger.error('Error deleting content brief:', error);
+    res.status(500).json({ error: 'Failed to delete content brief' });
   }
 });
 

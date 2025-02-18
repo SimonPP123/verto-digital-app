@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import SavedContentBriefs from '../../components/SavedContentBriefs';
 
 export default function SEOServicePage() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -9,6 +10,7 @@ export default function SEOServicePage() {
   const [result, setResult] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
   const [brief, setBrief] = useState<any>(null);
+  const [refreshBriefs, setRefreshBriefs] = useState(0);
 
   // Poll for results
   useEffect(() => {
@@ -83,6 +85,8 @@ export default function SEOServicePage() {
   useEffect(() => {
     if (status === 'completed') {
       setResult('Content Brief: Your SEO content brief has been successfully generated! You can find it below and in the Google Drive folder.');
+      // Trigger refresh of saved briefs
+      setRefreshBriefs(prev => prev + 1);
     }
   }, [status]);
 
@@ -195,6 +199,8 @@ export default function SEOServicePage() {
              dangerouslySetInnerHTML={{ __html: brief }}>
         </div>
       )}
+
+      <SavedContentBriefs refreshTrigger={refreshBriefs} />
     </div>
   );
 } 
