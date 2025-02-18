@@ -477,13 +477,29 @@ router.post('/seo/content-brief/callback', async (req, res) => {
       contentReceived: !!content
     });
 
+    // Parse the content from text/html format
+    let processedContent;
+    try {
+      // If content is a string (HTML), parse it into an object
+      if (typeof content === 'string') {
+        processedContent = {
+          brief: content // Store the HTML content directly
+        };
+      } else {
+        processedContent = content;
+      }
+    } catch (error) {
+      logger.error('Error parsing content:', error);
+      processedContent = { brief: content }; // Store as is if parsing fails
+    }
+
     // Return success to n8n
     res.json({
       success: true,
-      message: 'Content brief received successfully'
+      message: 'Content brief received successfully',
+      content: processedContent
     });
 
-    // TODO: In the future, we might want to store this in the database
   } catch (error) {
     logger.error('Error handling n8n callback:', error);
     res.status(500).json({

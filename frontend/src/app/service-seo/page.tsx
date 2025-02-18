@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function SEOServicePage() {
@@ -9,6 +9,36 @@ export default function SEOServicePage() {
   const [result, setResult] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
   const [brief, setBrief] = useState<any>(null);
+
+  // Poll for results
+  useEffect(() => {
+    let pollInterval: NodeJS.Timeout;
+
+    if (status === 'processing') {
+      pollInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/seo/content-brief/status`, {
+            credentials: 'include'
+          });
+          const data = await response.json();
+          
+          if (data.content) {
+            setStatus('completed');
+            setBrief(data.content);
+            clearInterval(pollInterval);
+          }
+        } catch (error) {
+          console.error('Error polling for results:', error);
+        }
+      }, 5000); // Poll every 5 seconds
+    }
+
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [status]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -145,20 +175,8 @@ export default function SEOServicePage() {
       {brief && (
         <div className="mt-8 p-6 bg-white rounded-lg shadow-lg border border-gray-200">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Generated Content Brief</h2>
-          <div className="prose max-w-none">
-            {Object.entries(brief).map(([key, value]) => (
-              <div key={key} className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-2 capitalize">
-                  {key.replace(/_/g, ' ')}
-                </h3>
-                <div className="text-gray-600">
-                  {Array.isArray(value) 
-                    ? value.map((item, i) => <p key={i} className="mb-2">{item}</p>)
-                    : <p>{String(value)}</p>
-                  }
-                </div>
-              </div>
-            ))}
+          <div className="prose max-w-none" 
+               dangerouslySetInnerHTML={{ __html: typeof brief === 'string' ? brief : brief.brief || '' }}>
           </div>
         </div>
       )}
