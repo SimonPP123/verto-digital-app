@@ -434,4 +434,64 @@ router.delete('/templates/:id', isAuthenticated, async (req, res) => {
   }
 });
 
+// Send SEO content to n8n webhook
+router.post('/seo/content-brief', isAuthenticated, async (req, res) => {
+  try {
+    const { keyword, competitors, target_audience } = req.body;
+    
+    // Send data to n8n webhook
+    await axios.post(process.env.N8N_CONTENT_BRIEF, {
+      keyword,
+      competitors,
+      target_audience,
+      user: {
+        email: req.user.email,
+        id: req.user._id
+      },
+      timestamp: new Date().toISOString()
+    });
+
+    // Return immediate confirmation
+    res.json({
+      success: true,
+      message: 'Request received and is being processed',
+      status: 'processing'
+    });
+  } catch (error) {
+    logger.error('Error sending content brief to n8n:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send content brief request',
+      error: error.message
+    });
+  }
+});
+
+// Receive processed SEO content brief from n8n
+router.post('/seo/content-brief/callback', async (req, res) => {
+  try {
+    const { content, userId } = req.body;
+    
+    logger.info('Received processed SEO content brief from n8n:', {
+      userId,
+      contentReceived: !!content
+    });
+
+    // Return success to n8n
+    res.json({
+      success: true,
+      message: 'Content brief received successfully'
+    });
+
+    // TODO: In the future, we might want to store this in the database
+  } catch (error) {
+    logger.error('Error handling n8n callback:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to handle content brief callback',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 

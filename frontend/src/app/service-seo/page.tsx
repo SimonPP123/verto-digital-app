@@ -7,13 +7,17 @@ export default function SEOServicePage() {
   const { isAuthenticated, isLoading } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [status, setStatus] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
+  const [brief, setBrief] = useState<any>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsProcessing(true);
+    setStatus('processing');
+    setBrief(null);
     try {
       const formData = new FormData(e.currentTarget);
-      const response = await fetch('http://localhost:5000/api/dify/run', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/seo/content-brief`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -27,9 +31,16 @@ export default function SEOServicePage() {
       });
 
       const data = await response.json();
-      setResult(data.result);
+      if (data.success) {
+        setStatus('processing');
+        setResult('Your content brief request is being processed. This might take a few minutes...');
+      } else {
+        setStatus('error');
+        setResult('Error: ' + data.message);
+      }
     } catch (error) {
       console.error('Error:', error);
+      setStatus('error');
       setResult('An error occurred while processing your request.');
     } finally {
       setIsProcessing(false);
@@ -109,11 +120,44 @@ export default function SEOServicePage() {
       </form>
 
       {result && (
-        <div className="mt-8 p-4 bg-gray-50 rounded-lg">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Generated Brief</h2>
+        <div className={`mt-8 p-4 rounded-lg ${
+          status === 'error' ? 'bg-red-50' : 
+          status === 'processing' ? 'bg-yellow-50' : 
+          'bg-green-50'
+        }`}>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">
+            {status === 'error' ? 'Error' : 
+             status === 'processing' ? 'Processing' : 
+             'Result'}
+          </h2>
           <div className="prose max-w-none">
             {result.split('\n').map((line, index) => (
-              <p key={index} className="mb-2">{line}</p>
+              <p key={index} className={`mb-2 ${
+                status === 'error' ? 'text-red-600' : 
+                status === 'processing' ? 'text-yellow-600' : 
+                'text-green-600'
+              }`}>{line}</p>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {brief && (
+        <div className="mt-8 p-6 bg-white rounded-lg shadow-lg border border-gray-200">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Generated Content Brief</h2>
+          <div className="prose max-w-none">
+            {Object.entries(brief).map(([key, value]) => (
+              <div key={key} className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-2 capitalize">
+                  {key.replace(/_/g, ' ')}
+                </h3>
+                <div className="text-gray-600">
+                  {Array.isArray(value) 
+                    ? value.map((item, i) => <p key={i} className="mb-2">{item}</p>)
+                    : <p>{String(value)}</p>
+                  }
+                </div>
+              </div>
             ))}
           </div>
         </div>
