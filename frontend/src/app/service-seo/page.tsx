@@ -98,42 +98,36 @@ export default function SEOServicePage() {
 
   return (
     <div className="max-w-4xl mx-auto py-12 px-4">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">SEO Content Brief Generator</h1>
+      <h1 className="text-3xl font-bold text-gray-900 mb-4">VertoDigital Keyword to SEO Content Brief</h1>
       
+      <div className="mb-8 prose">
+        <p className="text-gray-600 mb-6">
+          Enter the primary keyword or topic for the content brief. This should represent the main focus of the SEO-optimized content you want to create. Once completed, you'll be redirected to a Google Drive folder containing your generated SEO content brief.
+        </p>
+
+        <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Here is how the workflow works:</h2>
+          <ol className="list-decimal list-inside space-y-2 text-gray-600">
+            <li>Keyword/topic is searched in Google</li>
+            <li>Scrape the content of top 5 ranked pages</li>
+            <li>GPT Agent analyses the content and generates the content brief</li>
+            <li>Google Doc is created with the SEO content brief text</li>
+            <li>You will be redirected to the Google Drive folder, where is your SEO content brief</li>
+          </ol>
+        </div>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
           <label htmlFor="keyword" className="block text-sm font-medium text-gray-700">
-            Target Keyword
+            Keyword/Topic
           </label>
           <input
             type="text"
             name="keyword"
             id="keyword"
             required
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="competitors" className="block text-sm font-medium text-gray-700">
-            Competitor URLs (one per line)
-          </label>
-          <textarea
-            name="competitors"
-            id="competitors"
-            rows={4}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="target_audience" className="block text-sm font-medium text-gray-700">
-            Target Audience
-          </label>
-          <input
-            type="text"
-            name="target_audience"
-            id="target_audience"
+            placeholder="Write your keyword/topic here"
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
           />
         </div>
@@ -145,7 +139,7 @@ export default function SEOServicePage() {
             isProcessing ? 'opacity-50 cursor-not-allowed' : ''
           }`}
         >
-          {isProcessing ? 'Processing...' : 'Generate Brief'}
+          {isProcessing ? 'Processing...' : 'Submit'}
         </button>
       </form>
 
