@@ -438,15 +438,13 @@ router.delete('/templates/:id', isAuthenticated, async (req, res) => {
 // Send SEO content to n8n webhook
 router.post('/seo/content-brief', isAuthenticated, async (req, res) => {
   try {
-    const { keyword, competitors, target_audience } = req.body;
+    const { keyword } = req.body;
     
     // Create a placeholder content brief to track the request
     const placeholderBrief = await ContentBrief.create({
       user: req.user._id,
       content: 'Processing...',
       keyword,
-      competitors,
-      target_audience,
       createdAt: new Date()
     });
 
@@ -457,14 +455,14 @@ router.post('/seo/content-brief', isAuthenticated, async (req, res) => {
     
     // Send data to n8n webhook
     await axios.post(process.env.N8N_CONTENT_BRIEF, {
-      keyword,
-      competitors,
-      target_audience,
-      user: {
-        email: req.user.email,
-        id: req.user._id
-      },
-      timestamp: new Date().toISOString()
+      data: {
+        keyword: keyword,
+        user: {
+          email: req.user.email,
+          id: req.user._id.toString()
+        },
+        briefId: placeholderBrief._id.toString()
+      }
     });
 
     // Return immediate confirmation

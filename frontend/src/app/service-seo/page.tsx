@@ -54,9 +54,7 @@ export default function SEOServicePage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          keyword: formData.get('keyword'),
-          competitors: formData.get('competitors'),
-          target_audience: formData.get('target_audience'),
+          keyword: formData.get('keyword')
         }),
       });
 
