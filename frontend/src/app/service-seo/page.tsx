@@ -61,7 +61,7 @@ export default function SEOServicePage() {
       const data = await response.json();
       if (data.success) {
         setStatus('processing');
-        setResult('Your content brief request is being processed. This might take a few minutes...');
+        setResult('Your content brief request is being processed. This might take some time...');
       } else {
         setStatus('error');
         setResult('Error: ' + data.message);
@@ -161,6 +161,21 @@ export default function SEOServicePage() {
               }`}>{line}</p>
             ))}
           </div>
+        </div>
+      )}
+
+      {status === 'completed' && (
+        <div className="mt-8 p-6 bg-white rounded-lg shadow-lg border border-gray-200">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Google Drive with all content briefs</h2>
+          <p className="text-gray-600 mb-4">Access all your generated content briefs in the Google Drive folder below:</p>
+          <a 
+            href="https://drive.google.com/drive/folders/10mOJL_yPD_N9kmiBjL9zP3pzwyPqygXQ"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Open Google Drive Folder
+          </a>
         </div>
       )}
 
