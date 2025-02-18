@@ -440,6 +440,21 @@ router.post('/seo/content-brief', isAuthenticated, async (req, res) => {
   try {
     const { keyword, competitors, target_audience } = req.body;
     
+    // Create a placeholder content brief to track the request
+    const placeholderBrief = await ContentBrief.create({
+      user: req.user._id,
+      content: 'Processing...',
+      keyword,
+      competitors,
+      target_audience,
+      createdAt: new Date()
+    });
+
+    logger.info('Created placeholder content brief:', {
+      briefId: placeholderBrief._id,
+      userId: req.user._id
+    });
+    
     // Send data to n8n webhook
     await axios.post(process.env.N8N_CONTENT_BRIEF, {
       keyword,
@@ -456,7 +471,8 @@ router.post('/seo/content-brief', isAuthenticated, async (req, res) => {
     res.json({
       success: true,
       message: 'Request received and is being processed',
-      status: 'processing'
+      status: 'processing',
+      briefId: placeholderBrief._id
     });
   } catch (error) {
     logger.error('Error sending content brief to n8n:', error);
@@ -471,22 +487,33 @@ router.post('/seo/content-brief', isAuthenticated, async (req, res) => {
 // Receive processed SEO content brief from n8n
 router.post('/seo/content-brief/callback', async (req, res) => {
   try {
-    const { content, userId } = req.body;
+    // Get raw body content
+    const content = req.body.toString();
     
     logger.info('Received processed SEO content brief from n8n:', {
-      userId,
-      contentReceived: !!content
+      contentLength: content.length,
+      contentType: req.get('Content-Type')
     });
+
+    // Extract userId from the most recent content brief request
+    const latestRequest = await ContentBrief.findOne()
+      .sort({ createdAt: -1 })
+      .select('user');
+
+    if (!latestRequest) {
+      throw new Error('No recent content brief request found');
+    }
 
     // Store the content brief
     const contentBrief = await ContentBrief.create({
-      user: userId,
-      content: content
+      user: latestRequest.user,
+      content: content,
+      createdAt: new Date()
     });
 
     logger.info('Stored content brief:', {
       briefId: contentBrief._id,
-      userId
+      userId: latestRequest.user
     });
 
     // Return success to n8n
