@@ -75,6 +75,12 @@ export default function SEOServicePage() {
     }
   };
 
+  useEffect(() => {
+    if (status === 'completed') {
+      setResult('Your SEO content brief has been successfully generated! You can find it below and in the Google Drive folder.');
+    }
+  }, [status]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
