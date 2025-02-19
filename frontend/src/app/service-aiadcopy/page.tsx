@@ -717,6 +717,18 @@ const AdCopyServicePage: React.FC = () => {
               </button>
             </form>
 
+            <div className="mt-6 flex items-center justify-center">
+              <span className="text-gray-600 mr-3">Access all generated ad copies here:</span>
+              <a 
+                href="https://drive.google.com/drive/folders/1DvIbLMzlbfwR2lXkEmqfHO8XkfzBu2Ct"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Open Google Drive Folder
+              </a>
+            </div>
+
             {result && (
               <div className="mt-8 space-y-6 overflow-x-auto max-w-full">
                 <div className="bg-white rounded-lg shadow p-4 lg:p-6">
