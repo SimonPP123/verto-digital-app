@@ -114,6 +114,15 @@ export default function SEOServicePage() {
     <div className="max-w-4xl mx-auto py-12 px-4">
       <h1 className="text-3xl font-bold text-gray-900 mb-4">VertoDigital Keyword to SEO Content Brief</h1>
       
+      <div className="mb-8 aspect-video w-full max-w-4xl mx-auto rounded-lg overflow-hidden shadow-lg">
+        <iframe
+          src="https://www.loom.com/embed/44de86a9b715443fb51ea7e8b36cfa4d?sid=cf794690-4b37-4b7c-877b-1c5be779f955"
+          frameBorder="0"
+          allowFullScreen
+          className="w-full h-full"
+        ></iframe>
+      </div>
+
       <div className="mb-8 prose">
         <p className="text-gray-600 mb-6">
           Enter the primary keyword or topic for the content brief. This should represent the main focus of the SEO-optimized content you want to create. Once completed, you'll be redirected to a Google Drive folder containing your generated SEO content brief.
