@@ -531,6 +531,9 @@ const AdCopyServicePage: React.FC = () => {
         <div className="flex-1 w-full min-w-0 py-6 lg:py-8 px-4 lg:px-8">
           <div className="max-w-full mx-auto">
             <div className="text-center">
+              <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-6 lg:mb-8">
+                AI Ad Copy Generator
+              </h1>
               <div className="mb-8 aspect-video w-full max-w-4xl mx-auto rounded-lg overflow-hidden shadow-lg">
                 <iframe
                   src="https://www.loom.com/embed/0d51a2a58f7a43218924f154e3f84e60?sid=954da684-b64c-4ed4-a065-36e5ef818a5a"
@@ -539,9 +542,6 @@ const AdCopyServicePage: React.FC = () => {
                   className="w-full h-full"
                 ></iframe>
               </div>
-              <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-6 lg:mb-8">
-                AI Ad Copy Generator
-              </h1>
             </div>
             
             {error && (
