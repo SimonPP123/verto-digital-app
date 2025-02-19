@@ -137,6 +137,17 @@ export default function SEOServicePage() {
             <li>Google Doc is created with the SEO content brief text</li>
             <li>You will be redirected to the Google Drive folder, where is your SEO content brief</li>
           </ol>
+          <div className="mt-6 flex items-center">
+            <span className="text-gray-600 mr-3">Access all content briefs here:</span>
+            <a 
+              href="https://drive.google.com/drive/folders/10mOJL_yPD_N9kmiBjL9zP3pzwyPqygXQ"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Open Google Drive Folder
+            </a>
+          </div>
         </div>
       </div>
 
