@@ -7,6 +7,10 @@ const AdCopy = require('../models/AdCopy');
 const templateSchema = require('../schemas/templateSchema');
 const Template = require('../models/Template');
 const ContentBrief = require('../models/ContentBrief');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs').promises;
+const ChatSession = require('../models/ChatSession');
 
 // Middleware to check if user is authenticated
 const isAuthenticated = (req, res, next) => {
@@ -636,6 +640,163 @@ router.delete('/content-briefs/:id', isAuthenticated, async (req, res) => {
   } catch (error) {
     logger.error('Error deleting content brief:', error);
     res.status(500).json({ error: 'Failed to delete content brief' });
+  }
+});
+
+// Configure multer for file upload
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, '../../uploads'))
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+    cb(null, uniqueSuffix + path.extname(file.originalname))
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['.pdf', '.xls', '.xlsx', '.csv'];
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (allowedTypes.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only PDF, XLS, XLSX, and CSV files are allowed.'));
+  }
+};
+
+const upload = multer({ 
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  }
+});
+
+// Chat endpoints
+router.post('/chat/upload', isAuthenticated, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    // Create or update chat session
+    let chatSession = await ChatSession.findOne({ user: req.user._id });
+    if (!chatSession) {
+      chatSession = new ChatSession({ user: req.user._id });
+    }
+
+    // Update active file
+    chatSession.activeFile = {
+      originalName: req.file.originalname,
+      path: req.file.path,
+      type: path.extname(req.file.originalname).toLowerCase()
+    };
+
+    await chatSession.save();
+
+    res.json({
+      message: 'File uploaded successfully',
+      fileInfo: {
+        name: req.file.originalname,
+        type: path.extname(req.file.originalname).toLowerCase()
+      }
+    });
+  } catch (error) {
+    logger.error('File upload error:', error);
+    res.status(500).json({ error: 'Failed to upload file' });
+  }
+});
+
+router.post('/chat/message', isAuthenticated, async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    // Get or create chat session
+    let chatSession = await ChatSession.findOne({ user: req.user._id });
+    if (!chatSession) {
+      chatSession = new ChatSession({ user: req.user._id });
+    }
+
+    // Handle reset command
+    if (message.toLowerCase().trim() === 'reset the chat') {
+      chatSession.messages = [];
+      if (chatSession.activeFile?.path) {
+        await fs.unlink(chatSession.activeFile.path).catch(err => 
+          logger.error('Error deleting file:', err)
+        );
+      }
+      chatSession.activeFile = null;
+      await chatSession.save();
+      return res.json({ message: 'Chat reset successfully' });
+    }
+
+    // Add user message
+    chatSession.messages.push({
+      role: 'user',
+      content: message
+    });
+
+    // Prepare n8n request
+    let n8nPayload = {
+      message,
+      sessionId: chatSession._id.toString()
+    };
+
+    // Add file if exists
+    if (chatSession.activeFile) {
+      const fileBuffer = await fs.readFile(chatSession.activeFile.path);
+      n8nPayload.file = {
+        data: fileBuffer.toString('base64'),
+        name: chatSession.activeFile.originalName,
+        type: chatSession.activeFile.type
+      };
+    }
+
+    // Call n8n webhook
+    const n8nResponse = await axios.post(
+      process.env.N8N_CHAT_WITH_FILES,
+      n8nPayload,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    // Add assistant response
+    chatSession.messages.push({
+      role: 'assistant',
+      content: n8nResponse.data.response
+    });
+
+    await chatSession.save();
+
+    res.json({
+      message: n8nResponse.data.response
+    });
+  } catch (error) {
+    logger.error('Chat message error:', error);
+    res.status(500).json({ error: 'Failed to process message' });
+  }
+});
+
+router.get('/chat/history', isAuthenticated, async (req, res) => {
+  try {
+    const chatSession = await ChatSession.findOne({ user: req.user._id });
+    if (!chatSession) {
+      return res.json({ messages: [] });
+    }
+    res.json({ 
+      messages: chatSession.messages,
+      hasActiveFile: !!chatSession.activeFile,
+      activeFileName: chatSession.activeFile?.originalName
+    });
+  } catch (error) {
+    logger.error('Chat history error:', error);
+    res.status(500).json({ error: 'Failed to fetch chat history' });
   }
 });
 

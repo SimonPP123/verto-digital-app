@@ -11,6 +11,7 @@ const findAvailablePort = require('./utils/portFinder');
 const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
+const { startCleanupSchedule } = require('./utils/cleanup');
 
 // Initialize Express
 const app = express();
@@ -27,7 +28,8 @@ const corsOptions = {
     : ['http://localhost:3000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cookie'],
+  exposedHeaders: ['Set-Cookie'],
   optionsSuccessStatus: 200
 };
 
@@ -43,9 +45,12 @@ async function startServer() {
     const mongoConnection = await connectDB();
     logger.info('MongoDB connected successfully');
 
+    // Start cleanup schedule
+    startCleanupSchedule();
+
     // Session configuration - AFTER MongoDB connection
     app.use(session({
-      secret: process.env.SESSION_SECRET,
+      secret: process.env.SESSION_SECRET || 'your-secret-key',
       resave: false,
       saveUninitialized: false,
       store: MongoStore.create({
@@ -55,7 +60,7 @@ async function startServer() {
         autoRemove: "native",
         touchAfter: 24 * 3600,
         crypto: {
-          secret: process.env.SESSION_SECRET
+          secret: process.env.SESSION_SECRET || 'your-secret-key'
         }
       }),
       cookie: {
@@ -63,7 +68,6 @@ async function startServer() {
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         httpOnly: true,
-        domain: process.env.NODE_ENV === 'production' ? '.vertodigital.com' : undefined,
         path: '/'
       }
     }));
