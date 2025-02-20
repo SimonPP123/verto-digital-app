@@ -10,6 +10,7 @@ const ContentBrief = require('../models/ContentBrief');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
+const FormData = require('form-data');
 const ChatSession = require('../models/ChatSession');
 
 // Middleware to check if user is authenticated
@@ -747,24 +748,39 @@ router.post('/chat/message', isAuthenticated, async (req, res) => {
 
     // Add file if exists
     if (chatSession.activeFile) {
-      const fileBuffer = await fs.readFile(chatSession.activeFile.path);
-      n8nPayload.file = {
-        data: fileBuffer.toString('base64'),
-        name: chatSession.activeFile.originalName,
-        type: chatSession.activeFile.type
-      };
-    }
+      const fileStream = fs.createReadStream(chatSession.activeFile.path);
+      const formData = new FormData();
+      formData.append('message', message);
+      formData.append('sessionId', chatSession._id.toString());
+      formData.append('file', fileStream, {
+        filename: chatSession.activeFile.originalName,
+        contentType: chatSession.activeFile.type === '.pdf' ? 'application/pdf' : 
+                    chatSession.activeFile.type === '.csv' ? 'text/csv' :
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
 
-    // Call n8n webhook
-    const n8nResponse = await axios.post(
-      process.env.N8N_CHAT_WITH_FILES,
-      n8nPayload,
-      {
-        headers: {
-          'Content-Type': 'application/json'
+      // Call n8n webhook with FormData
+      const n8nResponse = await axios.post(
+        process.env.N8N_CHAT_WITH_FILES,
+        formData,
+        {
+          headers: {
+            ...formData.getHeaders(),
+          }
         }
-      }
-    );
+      );
+    } else {
+      // Call n8n webhook without file
+      const n8nResponse = await axios.post(
+        process.env.N8N_CHAT_WITH_FILES,
+        n8nPayload,
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+    }
 
     // Add assistant response
     chatSession.messages.push({
