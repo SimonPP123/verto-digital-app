@@ -98,7 +98,7 @@ export default function Layout({ children }: LayoutProps) {
                           : 'text-gray-700 hover:text-blue-600 hover:bg-blue-50'
                       } transition-all inline-flex items-center`}
                     >
-                      <span>SEO Tools</span>
+                      <span>SEO</span>
                       <svg 
                         className={`ml-2 h-4 w-4 transition-transform ${activeDropdown === 'seo' ? 'transform rotate-180' : ''}`} 
                         fill="none" 
@@ -120,34 +120,24 @@ export default function Layout({ children }: LayoutProps) {
                               <span>SEO Content Brief</span>
                             </div>
                           </Link>
-                          <Link 
-                            href="/service-chat" 
-                            className="group flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
-                          >
-                            <span className="mr-3">💬</span>
-                            <div className="flex-1 flex items-center justify-between">
-                              <span>Chat with Files</span>
-                              <span className="ml-2 px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">Under Construction</span>
-                            </div>
-                          </Link>
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Ads Section */}
+                  {/* Advertising Section */}
                   <div className="relative group">
                     <button
-                      onClick={() => toggleDropdown('ads')}
+                      onClick={() => toggleDropdown('advertising')}
                       className={`px-3 py-2 rounded-md text-sm font-medium ${
-                        activeDropdown === 'ads' 
+                        activeDropdown === 'advertising' 
                           ? 'text-blue-600 bg-blue-50' 
                           : 'text-gray-700 hover:text-blue-600 hover:bg-blue-50'
                       } transition-all inline-flex items-center`}
                     >
-                      <span>Ad Tools</span>
+                      <span>Advertising</span>
                       <svg 
-                        className={`ml-2 h-4 w-4 transition-transform ${activeDropdown === 'ads' ? 'transform rotate-180' : ''}`} 
+                        className={`ml-2 h-4 w-4 transition-transform ${activeDropdown === 'advertising' ? 'transform rotate-180' : ''}`} 
                         fill="none" 
                         viewBox="0 0 24 24" 
                         stroke="currentColor"
@@ -155,7 +145,7 @@ export default function Layout({ children }: LayoutProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </button>
-                    {activeDropdown === 'ads' && (
+                    {activeDropdown === 'advertising' && (
                       <div className="absolute left-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none">
                         <div className="py-1">
                           <Link 
@@ -211,6 +201,43 @@ export default function Layout({ children }: LayoutProps) {
                             <div className="flex-1 flex items-center justify-between">
                               <span>GA4 Weekly Report</span>
                               <span className="ml-2 px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">Under Construction</span>
+                            </div>
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* General Section */}
+                  <div className="relative group">
+                    <button
+                      onClick={() => toggleDropdown('general')}
+                      className={`px-3 py-2 rounded-md text-sm font-medium ${
+                        activeDropdown === 'general' 
+                          ? 'text-blue-600 bg-blue-50' 
+                          : 'text-gray-700 hover:text-blue-600 hover:bg-blue-50'
+                      } transition-all inline-flex items-center`}
+                    >
+                      <span>General</span>
+                      <svg 
+                        className={`ml-2 h-4 w-4 transition-transform ${activeDropdown === 'general' ? 'transform rotate-180' : ''}`} 
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {activeDropdown === 'general' && (
+                      <div className="absolute left-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none">
+                        <div className="py-1">
+                          <Link 
+                            href="/service-chat" 
+                            className="group flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                          >
+                            <span className="mr-3">💬</span>
+                            <div className="flex-1">
+                              <span>Chat with Files</span>
                             </div>
                           </Link>
                         </div>

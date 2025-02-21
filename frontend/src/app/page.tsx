@@ -16,7 +16,7 @@ const services = [
     description: 'Interactive chat interface for document analysis and insights',
     href: '/service-chat',
     icon: '💬',
-    underConstruction: true
+    underConstruction: false
   },
   {
     title: 'LinkedIn AI Audience',
@@ -81,11 +81,6 @@ export default function Home() {
           <p className="mt-4 text-xl text-gray-600">
             Select a service to get started
           </p>
-          <div className="mt-4 inline-block bg-orange-100 border border-orange-200 rounded-lg px-4 py-2">
-            <p className="text-sm text-orange-700">
-              🚧 Some services are currently under construction and will be available soon
-            </p>
-          </div>
         </div>
 
         <div className="mt-12 grid gap-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
