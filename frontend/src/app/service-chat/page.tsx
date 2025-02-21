@@ -38,7 +38,7 @@ export default function ChatServicePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
-  // Add polling effect with shorter interval
+  // Add polling effect with shorter interval and better state management
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
 
@@ -69,21 +69,20 @@ export default function ChatServicePage() {
             // Only update if we have different messages
             if (JSON.stringify(newMessages) !== JSON.stringify(messages)) {
               setMessages(newMessages);
+              // If we got a new message from the assistant, stop processing
+              const hasNewAssistantMessage = newMessages.some(
+                msg => msg.role === 'assistant' && 
+                !messages.some(m => m.content === msg.content)
+              );
+              if (hasNewAssistantMessage) {
+                setIsProcessing(false);
+              }
             }
-          }
-          
-          // Check if processing is complete
-          const session = await fetch(`${apiUrl}/api/chat/sessions/${activeChatId}`, {
-            credentials: 'include'
-          }).then(res => res.json());
-          
-          if (!session.isProcessing) {
-            setIsProcessing(false);
           }
         } catch (error) {
           console.error('Error polling for updates:', error);
         }
-      }, 1000); // Poll every second instead of every 2 seconds
+      }, 1000);
     }
 
     return () => {
@@ -385,8 +384,7 @@ export default function ChatServicePage() {
     if (!message.trim() || isProcessing || !activeChatId) return;
 
     const userMessage = createMessageWithTimestamp('user', message.trim());
-    const processingMessage = createMessageWithTimestamp('assistant', 'Processing your request...');
-    setMessages(prev => [...prev, userMessage, processingMessage]);
+    setMessages(prev => [...prev, userMessage]);
     setIsProcessing(true);
 
     try {
@@ -420,19 +418,16 @@ export default function ChatServicePage() {
         });
 
         if (response.status === 429) {
-            setMessages(prev => prev.filter(msg => msg !== processingMessage).concat(createMessageWithTimestamp(
+            setMessages(prev => [...prev, createMessageWithTimestamp(
                 'system',
                 'Please wait while the previous request is being processed...'
-            )));
+            )]);
             return;
         }
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-
-        // Remove the processing message after getting the response
-        setMessages(prev => prev.filter(msg => msg !== processingMessage));
 
         // Mark files as processed after successful message
         if (pendingFiles.length > 0) {
@@ -444,11 +439,12 @@ export default function ChatServicePage() {
         }
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        // Remove the processing message and show error
-        setMessages(prev => 
-            prev.filter(msg => msg !== processingMessage)
-                .concat(createMessageWithTimestamp('system', `Error: ${errorMessage}`))
-        );
+        setMessages(prev => [...prev, createMessageWithTimestamp(
+            'system',
+            `Error: ${errorMessage}`
+        )]);
+    } finally {
+        setIsProcessing(false);
     }
   };
 
@@ -630,7 +626,7 @@ export default function ChatServicePage() {
                 {activeFiles.map((file) => (
                   <div
                     key={file.id}
-                    className={`flex items-center justify-between p-2 mb-2 rounded-lg ${
+                    className={`flex items-center p-2 mb-2 rounded-lg ${
                       file.status === 'processed' ? 'bg-green-100' : 'bg-yellow-100'
                     }`}
                   >
@@ -638,12 +634,6 @@ export default function ChatServicePage() {
                       <span className="mr-2">📄</span>
                       <span>{file.name}</span>
                     </div>
-                    <button
-                      onClick={() => handleFileRemove(file.id)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      ✕
-                    </button>
                   </div>
                 ))}
               </div>
