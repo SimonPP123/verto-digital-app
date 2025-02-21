@@ -758,7 +758,7 @@ export default function ChatServicePage() {
         <div 
           ref={chatContainerRef}
           className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"
-          style={{ height: 'calc(100vh - 180px)' }}
+          style={{ height: 'calc(100vh - 240px)' }}
         >
           {messages.map((message, index) => (
             <div
@@ -766,7 +766,7 @@ export default function ChatServicePage() {
               className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[80%] rounded-lg p-4 ${
+                className={`max-w-[80%] rounded-lg p-3 ${
                   message.role === 'user'
                     ? 'bg-blue-600 text-white'
                     : 'bg-white shadow-md text-gray-900'

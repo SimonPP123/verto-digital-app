@@ -1426,6 +1426,15 @@ router.post('/chat/callback', express.text({ type: '*/*' }), async (req, res) =>
       return res.status(404).json({ error: 'Chat session not found' });
     }
 
+    // Remove ```html tags if they exist
+    let cleanContent = req.body;
+    if (cleanContent.startsWith('```html')) {
+      cleanContent = cleanContent.substring(7);
+    }
+    if (cleanContent.endsWith('```')) {
+      cleanContent = cleanContent.substring(0, cleanContent.length - 3);
+    }
+
     // Format HTML content with proper styling
     const formattedContent = `
       <div class="chat-message prose max-w-none text-gray-900 overflow-x-auto">
@@ -1438,7 +1447,7 @@ router.post('/chat/callback', express.text({ type: '*/*' }), async (req, res) =>
           .chat-message li { margin: 0.25em 0; }
           .chat-message p { margin: 0.75em 0; }
         </style>
-        ${req.body}
+        ${cleanContent.trim()}
       </div>
     `;
 
