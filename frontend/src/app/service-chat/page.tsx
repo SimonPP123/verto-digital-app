@@ -41,12 +41,13 @@ export default function ChatServicePage() {
   // Add polling effect with shorter interval and better state management
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
+    let lastMessageCount = messages.length;
 
     if (isProcessing && activeChatId) {
       // Initial fetch immediately
       fetchChatHistory();
       
-      // Then poll every second
+      // Then poll every 2 seconds
       pollInterval = setInterval(async () => {
         try {
           const response = await fetch(`${apiUrl}/api/chat/history?sessionId=${activeChatId}`, {
@@ -61,34 +62,45 @@ export default function ChatServicePage() {
           
           // Update messages if we have new ones
           if (data.messages && Array.isArray(data.messages)) {
-            const newMessages = data.messages.map(msg => ({
-              ...msg,
-              timestamp: msg.timestamp || Date.now()
-            }));
-
-            // Filter out any "Workflow was started" messages
-            const filteredMessages = newMessages.filter(msg => 
-              !msg.content.includes('Workflow was started')
-            );
+            const newMessages = data.messages
+              .filter(msg => !msg.content.includes('Workflow was started'))
+              .map(msg => ({
+                ...msg,
+                timestamp: msg.timestamp || Date.now()
+              }));
 
             // Only update if messages have changed
-            if (JSON.stringify(filteredMessages) !== JSON.stringify(messages)) {
-              setMessages(filteredMessages);
+            if (JSON.stringify(newMessages) !== JSON.stringify(messages)) {
+              setMessages(newMessages);
 
-              // Check if we have a complete response
-              const lastMessage = filteredMessages[filteredMessages.length - 1];
-              if (lastMessage && 
-                  lastMessage.role === 'assistant' && 
-                  lastMessage.content.includes("Please go ahead and ask your questions")) {
+              // Check if we have a new complete response
+              const currentMessageCount = newMessages.length;
+              const lastMessage = newMessages[currentMessageCount - 1];
+              const previousMessage = newMessages[currentMessageCount - 2];
+
+              // Stop processing if:
+              // 1. We have more messages than before (received a new message)
+              // 2. The last message is from the assistant
+              // 3. The previous message was from the user
+              if (currentMessageCount > lastMessageCount &&
+                  lastMessage?.role === 'assistant' &&
+                  previousMessage?.role === 'user') {
                 setIsProcessing(false);
                 clearInterval(pollInterval);
               }
+
+              lastMessageCount = currentMessageCount;
             }
           }
         } catch (error) {
           console.error('Error polling for updates:', error);
+          // Stop processing on error after 3 retries
+          if (error instanceof Error && error.message.includes('Failed to fetch updates')) {
+            setIsProcessing(false);
+            clearInterval(pollInterval);
+          }
         }
-      }, 1000);
+      }, 2000);
     }
 
     return () => {
@@ -216,10 +228,13 @@ export default function ChatServicePage() {
       
       // Set messages and files
       if (data.messages && Array.isArray(data.messages)) {
-        setMessages(data.messages.map(msg => ({
-          ...msg,
-          timestamp: msg.timestamp || Date.now()
-        })));
+        const filteredMessages = data.messages
+          .filter(msg => !msg.content.includes('Workflow was started'))
+          .map(msg => ({
+            ...msg,
+            timestamp: msg.timestamp || Date.now()
+          }));
+        setMessages(filteredMessages);
       }
       
       if (data.files && Array.isArray(data.files)) {
