@@ -86,7 +86,16 @@ export default function ChatServicePage() {
                lastNewMessage.role !== lastCurrentMessage.role);
 
             if (hasNewMessage || lastMessagesDifferent) {
-              setMessages(newMessages);
+              // Preserve local messages that aren't in the server response
+              const localMessages = messages.filter(msg => 
+                !newMessages.some(newMsg => 
+                  newMsg.content === msg.content && 
+                  newMsg.role === msg.role
+                )
+              );
+              
+              // Combine local messages with server messages
+              setMessages([...localMessages, ...newMessages]);
               
               // Check if we should stop polling
               if (lastNewMessage?.role === 'assistant') {
