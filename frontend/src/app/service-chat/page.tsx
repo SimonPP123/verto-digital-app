@@ -38,12 +38,15 @@ export default function ChatServicePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
-  // Add polling effect
+  // Add polling effect with shorter interval
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
 
     if (isProcessing && activeChatId) {
-      // Poll every 2 seconds while processing
+      // Initial fetch immediately
+      fetchChatHistory();
+      
+      // Then poll every second
       pollInterval = setInterval(async () => {
         try {
           const response = await fetch(`${apiUrl}/api/chat/history?sessionId=${activeChatId}`, {
@@ -58,10 +61,15 @@ export default function ChatServicePage() {
           
           // Update messages if we have new ones
           if (data.messages && Array.isArray(data.messages)) {
-            setMessages(data.messages.map(msg => ({
+            const newMessages = data.messages.map(msg => ({
               ...msg,
               timestamp: msg.timestamp || Date.now()
-            })));
+            }));
+            
+            // Only update if we have different messages
+            if (JSON.stringify(newMessages) !== JSON.stringify(messages)) {
+              setMessages(newMessages);
+            }
           }
           
           // Check if processing is complete
@@ -75,7 +83,7 @@ export default function ChatServicePage() {
         } catch (error) {
           console.error('Error polling for updates:', error);
         }
-      }, 2000);
+      }, 1000); // Poll every second instead of every 2 seconds
     }
 
     return () => {
@@ -83,7 +91,7 @@ export default function ChatServicePage() {
         clearInterval(pollInterval);
       }
     };
-  }, [isProcessing, activeChatId, apiUrl]);
+  }, [isProcessing, activeChatId, apiUrl, messages]);
 
   // Fetch chat sessions on mount
   useEffect(() => {
@@ -377,7 +385,8 @@ export default function ChatServicePage() {
     if (!message.trim() || isProcessing || !activeChatId) return;
 
     const userMessage = createMessageWithTimestamp('user', message.trim());
-    setMessages(prev => [...prev, userMessage]);
+    const processingMessage = createMessageWithTimestamp('assistant', 'Processing your request...');
+    setMessages(prev => [...prev, userMessage, processingMessage]);
     setIsProcessing(true);
 
     try {
@@ -411,10 +420,10 @@ export default function ChatServicePage() {
         });
 
         if (response.status === 429) {
-            setMessages(prev => [...prev, createMessageWithTimestamp(
+            setMessages(prev => prev.filter(msg => msg !== processingMessage).concat(createMessageWithTimestamp(
                 'system',
                 'Please wait while the previous request is being processed...'
-            )]);
+            )));
             return;
         }
 
@@ -422,9 +431,8 @@ export default function ChatServicePage() {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const data = await response.json();
-        const assistantMessage = createMessageWithTimestamp('assistant', data.message);
-        setMessages(prev => [...prev, assistantMessage]);
+        // Remove the processing message after getting the response
+        setMessages(prev => prev.filter(msg => msg !== processingMessage));
 
         // Mark files as processed after successful message
         if (pendingFiles.length > 0) {
@@ -436,12 +444,11 @@ export default function ChatServicePage() {
         }
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        setMessages(prev => [...prev, createMessageWithTimestamp(
-            'system',
-            `Error: ${errorMessage}`
-        )]);
-    } finally {
-        setIsProcessing(false);
+        // Remove the processing message and show error
+        setMessages(prev => 
+            prev.filter(msg => msg !== processingMessage)
+                .concat(createMessageWithTimestamp('system', `Error: ${errorMessage}`))
+        );
     }
   };
 
