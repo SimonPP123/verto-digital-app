@@ -467,7 +467,10 @@ export default function ChatServicePage() {
     if (!message.trim() || isProcessing || !activeChatId) return;
 
     const userMessage = createMessageWithTimestamp('user', message.trim());
-    setMessages(prev => [...prev, userMessage]);
+    const processingMessage = createMessageWithTimestamp('system', 'Processing your request...');
+    
+    // Add both messages immediately
+    setMessages(prev => [...prev, userMessage, processingMessage]);
     setIsProcessing(true);
 
     try {
@@ -502,10 +505,12 @@ export default function ChatServicePage() {
         });
 
         if (response.status === 429) {
-            setMessages(prev => [...prev, createMessageWithTimestamp(
-                'system',
-                'Please wait while the previous request is being processed...'
-            )]);
+            setMessages(prev => prev.filter(msg => msg !== processingMessage).concat([
+                createMessageWithTimestamp(
+                    'system',
+                    'Please wait while the previous request is being processed...'
+                )
+            ]));
             setIsProcessing(false);
             return;
         }
@@ -523,22 +528,15 @@ export default function ChatServicePage() {
             ));
         }
 
-        // Add processing message
-        setMessages(prev => [
-            // Keep all previous messages
-            ...prev,
-            createMessageWithTimestamp(
-                'system',
-                'Processing your request...'
-            )
-        ]);
-
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        setMessages(prev => [...prev, createMessageWithTimestamp(
-            'system',
-            `Error: ${errorMessage}`
-        )]);
+        // Remove processing message and add error message
+        setMessages(prev => prev.filter(msg => msg !== processingMessage).concat([
+            createMessageWithTimestamp(
+                'system',
+                `Error: ${errorMessage}`
+            )
+        ]));
         setIsProcessing(false);
     }
   };
