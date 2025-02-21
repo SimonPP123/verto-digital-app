@@ -300,6 +300,8 @@ export default function ChatServicePage() {
 
         const data = await response.json();
         if (response.ok && data.files && data.files.length > 0) {
+            const uploadedFile = data.files[0];
+            
             // Add success message
             setMessages(prev => [
                 ...prev,
@@ -309,24 +311,25 @@ export default function ChatServicePage() {
                 )
             ]);
 
-            // For Excel files, prompt for sheet selection
-            if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+            // For Excel files, show sheet names
+            if ((file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) && uploadedFile.sheetNames) {
                 setMessages(prev => [
                     ...prev,
                     createMessageWithTimestamp(
                         'system',
-                        'Please specify which sheet you would like to use from the Excel file.'
+                        `Available sheets: ${uploadedFile.sheetNames.join(', ')}\nPlease specify which sheet you would like to use from the Excel file.`
                     )
                 ]);
             }
 
             // Update files list with proper type checking
-            const updatedFiles = data.files.map((uploadedFile: ChatFile) => ({
+            const updatedFiles = data.files.map((uploadedFile: ChatFile & { sheetNames?: string[] }) => ({
                 id: uploadedFile.id || uploadedFile._id,
                 name: uploadedFile.name || uploadedFile.originalName,
                 type: uploadedFile.type,
                 size: uploadedFile.size,
-                status: 'pending' as const
+                status: 'pending' as const,
+                sheetNames: uploadedFile.sheetNames
             }));
             
             setActiveFiles(prev => [...prev, ...updatedFiles]);
@@ -335,7 +338,7 @@ export default function ChatServicePage() {
         } else {
             throw new Error(data.error || 'Failed to upload file');
         }
-      } catch (error) {
+    } catch (error) {
         console.error('Error uploading file:', error);
         setMessages(prev => [
             ...prev,
@@ -344,7 +347,7 @@ export default function ChatServicePage() {
                 `Error uploading file: ${error instanceof Error ? error.message : 'Unknown error'}`
             )
         ]);
-      } finally {
+    } finally {
         setIsProcessing(false);
         if (event.target) event.target.value = '';
     }
@@ -471,7 +474,7 @@ export default function ChatServicePage() {
 
         // Start polling for response
         let pollAttempts = 0;
-        const maxAttempts = 30; // 60 seconds maximum waiting time
+        const maxAttempts = 150; // 5 minutes maximum waiting time (150 attempts * 2 seconds)
         const pollInterval = setInterval(async () => {
             try {
                 const historyResponse = await fetch(`${apiUrl}/api/chat/history?sessionId=${activeChatId}`, {
@@ -522,13 +525,17 @@ export default function ChatServicePage() {
                     clearInterval(pollInterval);
                     setMessages(prev => [...prev, createMessageWithTimestamp(
                         'system',
-                        'Request timed out. Please try again.'
+                        'Request timed out after 5 minutes. Please try sending your message again. If the issue persists, try resetting the chat or contact support.'
                     )]);
                 }
             } catch (error) {
                 console.error('Error polling for updates:', error);
                 setIsProcessing(false);
                 clearInterval(pollInterval);
+                setMessages(prev => [...prev, createMessageWithTimestamp(
+                    'system',
+                    'An error occurred while waiting for a response. Please try again.'
+                )]);
             }
         }, 2000);
 
@@ -701,12 +708,12 @@ export default function ChatServicePage() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col h-screen">
         {/* Header */}
-        <div className="p-6 bg-gray-50 border-b border-gray-200">
+        <div className="p-2 bg-gray-50 border-b border-gray-200">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-xl font-bold text-gray-900">
                 {chatSessions.find(chat => chat._id === activeChatId)?.name || 'Chat with Files'}
               </h1>
             </div>
@@ -714,7 +721,7 @@ export default function ChatServicePage() {
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                className="block w-64 px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="block w-64 px-2 py-1 text-sm bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               >
                 {MODEL_OPTIONS.map((model) => (
                   <option key={model.value} value={model.value}>
@@ -727,18 +734,17 @@ export default function ChatServicePage() {
 
           {/* Active Files List */}
           {activeFiles.length > 0 && (
-            <div className="mt-4 space-y-2">
-              <h3 className="text-sm font-medium text-gray-700">Active Files:</h3>
-              <div className="flex flex-wrap gap-2">
+            <div className="mt-1">
+              <div className="flex flex-wrap gap-1">
                 {activeFiles.map((file) => (
                   <div
                     key={file.id}
-                    className={`flex items-center p-2 mb-2 rounded-lg ${
+                    className={`flex items-center px-2 py-0.5 text-sm rounded-lg ${
                       file.status === 'processed' ? 'bg-green-100' : 'bg-yellow-100'
                     }`}
                   >
                     <div className="flex items-center">
-                      <span className="mr-2">📄</span>
+                      <span className="mr-1">📄</span>
                       <span>{file.name}</span>
                     </div>
                   </div>
@@ -751,7 +757,8 @@ export default function ChatServicePage() {
         {/* Chat Messages */}
         <div 
           ref={chatContainerRef}
-          className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50"
+          className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"
+          style={{ height: 'calc(100vh - 180px)' }}
         >
           {messages.map((message, index) => (
             <div
@@ -765,7 +772,14 @@ export default function ChatServicePage() {
                     : 'bg-white shadow-md text-gray-900'
                 }`}
               >
-                <p className="whitespace-pre-wrap">{message.content}</p>
+                {message.role === 'user' ? (
+                  <p className="whitespace-pre-wrap">{message.content}</p>
+                ) : (
+                  <div 
+                    className="chat-content"
+                    dangerouslySetInnerHTML={{ __html: message.content }}
+                  />
+                )}
               </div>
             </div>
           ))}
@@ -785,7 +799,7 @@ export default function ChatServicePage() {
         </div>
 
         {/* Message Input */}
-        <div className="p-4 bg-white border-t border-gray-200">
+        <div className="p-2 bg-white border-t border-gray-200">
           <form onSubmit={(e) => {
             e.preventDefault();
             const messageInput = messageInputRef.current;
@@ -796,7 +810,7 @@ export default function ChatServicePage() {
           }} className="flex items-start space-x-2">
             <textarea
               ref={messageInputRef}
-              rows={3}
+              rows={1}
               placeholder={!activeChatId ? "Select or create a chat to start..." :
                 activeFiles.length === 0 ? "Please upload a file first..." :
                 isProcessing ? "Processing previous request... Please wait..." :
@@ -806,7 +820,7 @@ export default function ChatServicePage() {
               className="flex-1 rounded-md border-gray-300 shadow-sm 
                 focus:border-blue-500 focus:ring-blue-500
                 disabled:opacity-50 disabled:cursor-not-allowed
-                resize-y min-h-[80px] max-h-[400px] p-3
+                resize-y min-h-[40px] max-h-[80px] p-2
                 text-base leading-relaxed"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -875,10 +889,8 @@ export default function ChatServicePage() {
               </svg>
             </button>
           </form>
-          <div className="mt-2 text-sm text-gray-600">
-            Upload one file at a time. Maximum 10 files total.<br/>
-            Send a message about each file before uploading the next one.<br/>
-            Supported formats: PDF, Excel (.xls, .xlsx), CSV
+          <div className="mt-1 text-xs text-gray-600">
+            <strong>File Upload Instructions:</strong> Upload one file at a time (max 10) • Send a message about each file • Supported: PDF, Excel, CSV
           </div>
         </div>
       </div>

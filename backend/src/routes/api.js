@@ -13,6 +13,7 @@ const fs = require('fs');
 const fsPromises = require('fs').promises;
 const FormData = require('form-data');
 const ChatSession = require('../models/ChatSession');
+const XLSX = require('xlsx');
 
 // Create uploads directory if it doesn't exist
 const uploadDir = path.join(__dirname, '../../uploads');
@@ -413,15 +414,29 @@ router.post('/chat/upload', upload.array('file', 5), async (req, res) => {
     }
 
     // Add files to the session's files array with binary data
-    const newFiles = files.map(file => ({
-      originalName: file.originalname,
-      path: file.path,
-      type: file.mimetype,
-      size: file.size,
-      status: 'pending',
-      uploadedAt: new Date(),
-      isProcessed: false,
-      binary: fs.readFileSync(file.path)
+    const newFiles = await Promise.all(files.map(async file => {
+      let sheetNames;
+      // If file is Excel, read sheet names
+      if (file.mimetype.includes('spreadsheet') || file.originalname.match(/\.(xlsx|xls)$/i)) {
+        try {
+          const workbook = XLSX.readFile(file.path);
+          sheetNames = workbook.SheetNames;
+        } catch (err) {
+          logger.error('Error reading Excel sheet names:', err);
+        }
+      }
+
+      return {
+        originalName: file.originalname,
+        path: file.path,
+        type: file.mimetype,
+        size: file.size,
+        status: 'pending',
+        uploadedAt: new Date(),
+        isProcessed: false,
+        binary: fs.readFileSync(file.path),
+        sheetNames: sheetNames // Add sheet names if available
+      };
     }));
 
     chatSession.files.push(...newFiles);
@@ -434,7 +449,8 @@ router.post('/chat/upload', upload.array('file', 5), async (req, res) => {
       type: file.type,
       size: file.size,
       status: file.status,
-      path: file.path
+      path: file.path,
+      sheetNames: file.sheetNames // Include sheet names in response
     }));
 
     // Log successful upload
@@ -445,7 +461,8 @@ router.post('/chat/upload', upload.array('file', 5), async (req, res) => {
         id: f.id,
         name: f.name,
         type: f.type,
-        size: f.size
+        size: f.size,
+        sheetNames: f.sheetNames
       }))
     });
 
@@ -1021,7 +1038,7 @@ router.post('/chat/message', isAuthenticated, async (req, res) => {
                     ...formData.getHeaders(),
                     'Accept': 'application/json'
                 },
-                timeout: 30000,
+                timeout: 300000, // 5 minute timeout
                 maxBodyLength: Infinity
             });
 
@@ -1393,40 +1410,14 @@ router.post('/chat/callback', express.text({ type: '*/*' }), async (req, res) =>
   try {
     logger.info('Received callback request:', {
       contentType: req.headers['content-type'],
-      body: req.body,
-      query: req.query
+      bodyPreview: req.body.substring(0, 200) + '...'
     });
 
-    let sessionId, message, error;
-
-    // Handle different content types
-    if (req.headers['content-type']?.includes('application/json')) {
-      try {
-        const jsonData = JSON.parse(req.body);
-        sessionId = jsonData.sessionId;
-        message = jsonData.message;
-        error = jsonData.error;
-      } catch (e) {
-        logger.error('Error parsing JSON body:', e);
-      }
-    }
-
-    // If we couldn't get sessionId from body, try query params
-    if (!sessionId) {
-      sessionId = req.query.sessionId;
-      message = req.body; // For text/html, use the raw body as message
-    }
-
+    const sessionId = req.query.sessionId;
     if (!sessionId) {
       logger.error('No session ID provided in request');
       return res.status(400).json({ error: 'Session ID is required' });
     }
-    
-    logger.info('Processing chat response callback:', {
-      sessionId,
-      messagePreview: message ? message.substring(0, 100) + '...' : null,
-      error
-    });
 
     // Find the chat session
     const chatSession = await ChatSession.findById(sessionId);
@@ -1435,32 +1426,44 @@ router.post('/chat/callback', express.text({ type: '*/*' }), async (req, res) =>
       return res.status(404).json({ error: 'Chat session not found' });
     }
 
-    if (error) {
-      // Add error message to chat
-      chatSession.messages.push({
-        role: 'system',
-        content: `Error: ${error}`,
-        timestamp: new Date(),
-        tokens: Math.ceil(error.length / 4)
-      });
-    } else if (message) {
-      // Add assistant's response
-      chatSession.messages.push({
-        role: 'assistant',
-        content: message,
-        timestamp: new Date(),
-        tokens: Math.ceil(message.length / 4)
-      });
-    }
+    // Format HTML content with proper styling
+    const formattedContent = `
+      <div class="chat-message prose max-w-none text-gray-900 overflow-x-auto">
+        <style>
+          .chat-message h1 { font-size: 1.5em; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+          .chat-message h2 { font-size: 1.25em; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+          .chat-message ul { list-style-type: disc; margin-left: 1.5em; margin-top: 0.5em; margin-bottom: 0.5em; }
+          .chat-message ul ul { list-style-type: circle; }
+          .chat-message ul ul ul { list-style-type: square; }
+          .chat-message li { margin: 0.25em 0; }
+          .chat-message p { margin: 0.75em 0; }
+        </style>
+        ${req.body}
+      </div>
+    `;
+
+    // Add assistant's response with formatted HTML
+    chatSession.messages.push({
+      role: 'assistant',
+      content: formattedContent,
+      timestamp: new Date(),
+      tokens: Math.ceil(req.body.length / 4)
+    });
 
     // Update session
     chatSession.isProcessing = false;
     chatSession.lastActivity = new Date();
     await chatSession.save();
 
+    logger.info('Processed HTML response:', {
+      sessionId,
+      messageLength: formattedContent.length,
+      isProcessing: false
+    });
+
     res.json({
       success: true,
-      message: 'Response processed successfully'
+      message: 'HTML response processed successfully'
     });
   } catch (error) {
     logger.error('Error processing chat callback:', error);
