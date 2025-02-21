@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import type { Message, File, ChatSession, ChatHistoryResponse } from '../../types/chat';
+import type { Message, File, ChatSession, ChatHistoryResponse, ModelOption } from '../../types/chat';
+import { MODEL_OPTIONS } from '../../types/chat';
 
 interface ChatFile {
   _id?: string;
@@ -33,6 +34,7 @@ export default function ChatServicePage() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [newChatName, setNewChatName] = useState('');
+  const [selectedModel, setSelectedModel] = useState<string>(MODEL_OPTIONS[0].value);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -434,7 +436,8 @@ export default function ChatServicePage() {
                 action: 'sendMessage',
                 sessionId: activeChatId,
                 chatInput: userMessage.content,
-                files: formattedFiles
+                files: formattedFiles,
+                model: selectedModel
             })
         });
 
@@ -706,6 +709,19 @@ export default function ChatServicePage() {
               <h1 className="text-2xl font-bold text-gray-900">
                 {chatSessions.find(chat => chat._id === activeChatId)?.name || 'Chat with Files'}
               </h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="block w-64 px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              >
+                {MODEL_OPTIONS.map((model) => (
+                  <option key={model.value} value={model.value}>
+                    {model.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
