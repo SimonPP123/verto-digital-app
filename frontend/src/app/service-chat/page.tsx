@@ -304,30 +304,35 @@ export default function ChatServicePage() {
         if (response.ok && data.files && data.files.length > 0) {
             const uploadedFile = data.files[0];
             
-            // Add success message
+            // Add success message with decoded filename
+            const decodedFileName = decodeURIComponent(escape(file.name || 'Unknown file'));
             setMessages(prev => [
                 ...prev,
                 createMessageWithTimestamp(
                     'system',
-                    `File uploaded successfully: ${file.name}`
+                    `File uploaded successfully: ${decodedFileName}`
                 )
             ]);
 
             // For Excel files, show sheet names
             if ((file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) && uploadedFile.sheetNames) {
+                const sheetMessage = uploadedFile.sheetNames && uploadedFile.sheetNames.length > 0
+                    ? `Available sheets in "${decodedFileName}": ${uploadedFile.sheetNames.join(', ')}\n\nPlease specify which sheets you want to use by sending a message like:\n"Please use sheets: ${uploadedFile.sheetNames[0]}${uploadedFile.sheetNames[1] ? `, ${uploadedFile.sheetNames[1]}` : ''}"`
+                    : `Unable to read sheets from "${decodedFileName}". Please make sure the file is not corrupted and try again.`;
+                
                 setMessages(prev => [
                     ...prev,
                     createMessageWithTimestamp(
                         'system',
-                        `Available sheets in "${file.name}": ${uploadedFile.sheetNames.join(', ')}\n\nPlease specify which sheets you want to use by sending a message like:\n"Please use sheets: ${uploadedFile.sheetNames[0]}${uploadedFile.sheetNames[1] ? `, ${uploadedFile.sheetNames[1]}` : ''}"`
+                        sheetMessage
                     )
                 ]);
             }
 
-            // Update files list with proper type checking
+            // Update files list with proper type checking and decoded filename
             const updatedFiles = data.files.map((uploadedFile: ChatFile & { sheetNames?: string[] }) => ({
                 id: uploadedFile.id || uploadedFile._id,
-                name: uploadedFile.name || uploadedFile.originalName,
+                name: decodeURIComponent(escape((uploadedFile.name || uploadedFile.originalName || 'Unknown file'))),
                 type: uploadedFile.type,
                 size: uploadedFile.size,
                 status: 'pending' as const,
@@ -829,7 +834,7 @@ export default function ChatServicePage() {
         <div 
           ref={chatContainerRef}
           className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"
-          style={{ height: 'calc(100vh - 160px)' }}
+          style={{ height: 'calc(100vh - 140px)' }}
         >
           {messages.map((message, index) => (
             <div
