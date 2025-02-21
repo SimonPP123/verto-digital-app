@@ -194,7 +194,7 @@ export default function ChatServicePage() {
                 <p>Before we begin, I recommend watching this quick overview of how to use the tool:</p>
                 <div class="aspect-w-16 aspect-h-9 mt-4 mb-4">
                   <iframe
-                    src="https://www.loom.com/embed/5f682bd7d5524f5c841a5464d1014e86?sid=21a8fc2d-ca88-4749-8798-372fbd894db0"
+                    src="https://www.loom.com/embed/79317424724f45f79d875e0f738e8682?sid=8a3c790d-6df5-4b9d-8b4b-d80eb171c78a"
                     frameborder="0"
                     webkitallowfullscreen
                     mozallowfullscreen
@@ -603,7 +603,11 @@ export default function ChatServicePage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ sessionId: activeChatId }),
+        body: JSON.stringify({
+          action: 'resetChat',
+          sessionId: activeChatId,
+          chatInput: 'reset the chat'
+        }),
       });
 
       if (!resetResponse.ok) {
