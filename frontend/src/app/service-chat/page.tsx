@@ -46,6 +46,8 @@ export default function ChatServicePage() {
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
     let lastMessageCount = messages.length;
+    let pollAttempts = 0;
+    const maxAttempts = 150; // 5 minutes maximum
 
     if (isProcessing && activeChatId) {
       // Initial fetch immediately
@@ -73,36 +75,46 @@ export default function ChatServicePage() {
                 timestamp: msg.timestamp || Date.now()
               }));
 
-            // Only update if messages have changed
-            if (JSON.stringify(newMessages) !== JSON.stringify(messages)) {
+            // Get the last message from both arrays
+            const lastNewMessage = newMessages[newMessages.length - 1];
+            const lastCurrentMessage = messages[messages.length - 1];
+
+            // Check if we have a new message or if the last messages are different
+            const hasNewMessage = newMessages.length > messages.length;
+            const lastMessagesDifferent = lastNewMessage && lastCurrentMessage && 
+              (lastNewMessage.content !== lastCurrentMessage.content || 
+               lastNewMessage.role !== lastCurrentMessage.role);
+
+            if (hasNewMessage || lastMessagesDifferent) {
               setMessages(newMessages);
-
-              // Check if we have a new complete response
-              const currentMessageCount = newMessages.length;
-              const lastMessage = newMessages[currentMessageCount - 1];
-              const previousMessage = newMessages[currentMessageCount - 2];
-
-              // Stop processing if:
-              // 1. We have more messages than before (received a new message)
-              // 2. The last message is from the assistant
-              // 3. The previous message was from the user
-              if (currentMessageCount > lastMessageCount &&
-                  lastMessage?.role === 'assistant' &&
-                  previousMessage?.role === 'user') {
+              
+              // Check if we should stop polling
+              if (lastNewMessage?.role === 'assistant') {
                 setIsProcessing(false);
                 clearInterval(pollInterval);
+                return;
               }
-
-              lastMessageCount = currentMessageCount;
             }
+          }
+
+          // Increment poll attempts and check timeout
+          pollAttempts++;
+          if (pollAttempts >= maxAttempts) {
+            setIsProcessing(false);
+            clearInterval(pollInterval);
+            setMessages(prev => [...prev, createMessageWithTimestamp(
+              'system',
+              'Request timed out after 5 minutes. Please try again.'
+            )]);
           }
         } catch (error) {
           console.error('Error polling for updates:', error);
-          // Stop processing on error after 3 retries
-          if (error instanceof Error && error.message.includes('Failed to fetch updates')) {
-            setIsProcessing(false);
-            clearInterval(pollInterval);
-          }
+          setIsProcessing(false);
+          clearInterval(pollInterval);
+          setMessages(prev => [...prev, createMessageWithTimestamp(
+            'system',
+            'An error occurred while waiting for a response. Please try again.'
+          )]);
         }
       }, 2000);
     }
@@ -112,7 +124,7 @@ export default function ChatServicePage() {
         clearInterval(pollInterval);
       }
     };
-  }, [isProcessing, activeChatId, apiUrl, messages]);
+  }, [isProcessing, activeChatId, apiUrl]);
 
   // Fetch chat sessions on mount
   useEffect(() => {
@@ -503,77 +515,17 @@ export default function ChatServicePage() {
         }
 
         // Add processing message
-        setMessages(prev => [...prev, createMessageWithTimestamp(
-            'system',
-            'Processing your request...'
-        )]);
-
-        // Start polling for response
-        let pollAttempts = 0;
-        const maxAttempts = 150; // 5 minutes maximum waiting time (150 attempts * 2 seconds)
-        const pollInterval = setInterval(async () => {
-            try {
-                const historyResponse = await fetch(`${apiUrl}/api/chat/history?sessionId=${activeChatId}`, {
-                    credentials: 'include'
-                });
-                
-                if (!historyResponse.ok) {
-                    throw new Error('Failed to fetch updates');
-                }
-                
-                const data: ChatHistoryResponse = await historyResponse.json();
-                
-                if (data.messages && Array.isArray(data.messages)) {
-                    const newMessages = data.messages
-                        .filter((msg: Message) => !msg.content.includes('Workflow was started'))
-                        .map((msg: Message) => ({
-                            ...msg,
-                            timestamp: msg.timestamp || Date.now()
-                        }));
-
-                    // Find the index of our user message
-                    const userMessageIndex = newMessages.findIndex(
-                        (msg: Message) => msg.role === 'user' && msg.content === message.trim()
-                    );
-
-                    if (userMessageIndex !== -1) {
-                        // Get all messages up to and including the next assistant message
-                        let endIndex = userMessageIndex + 1;
-                        while (endIndex < newMessages.length && newMessages[endIndex].role !== 'assistant') {
-                            endIndex++;
-                        }
-                        if (endIndex < newMessages.length) {
-                            // Remove the processing message and update with all messages
-                            setMessages(prev => prev.filter(msg => 
-                                msg.role !== 'system' || !msg.content.includes('Processing your request')
-                            ));
-                            setMessages(newMessages);
-                            setIsProcessing(false);
-                            clearInterval(pollInterval);
-                            return;
-                        }
-                    }
-                }
-
-                pollAttempts++;
-                if (pollAttempts >= maxAttempts) {
-                    setIsProcessing(false);
-                    clearInterval(pollInterval);
-                    setMessages(prev => [...prev, createMessageWithTimestamp(
-                        'system',
-                        'Request timed out after 5 minutes. Please try sending your message again. If the issue persists, try resetting the chat or contact support.'
-                    )]);
-                }
-            } catch (error) {
-                console.error('Error polling for updates:', error);
-                setIsProcessing(false);
-                clearInterval(pollInterval);
-                setMessages(prev => [...prev, createMessageWithTimestamp(
-                    'system',
-                    'An error occurred while waiting for a response. Please try again.'
-                )]);
-            }
-        }, 2000);
+        setMessages(prev => [
+            // Keep only system messages about reset and user's new message
+            ...prev.filter(msg => 
+                (msg.role === 'system' && msg.content.includes('Chat has been reset')) ||
+                (msg.role === 'user' && msg.content === userMessage.content)
+            ),
+            createMessageWithTimestamp(
+                'system',
+                'Processing your request...'
+            )
+        ]);
 
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
