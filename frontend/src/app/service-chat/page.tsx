@@ -443,6 +443,7 @@ export default function ChatServicePage() {
                 'system',
                 'Please wait while the previous request is being processed...'
             )]);
+            setIsProcessing(false);
             return;
         }
 
@@ -450,7 +451,7 @@ export default function ChatServicePage() {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        // Mark files as processed after successful message
+        // Mark files as processed after successful message send
         if (pendingFiles.length > 0) {
             setActiveFiles(prev => prev.map(file => 
                 pendingFiles.some(pf => pf.id === file.id) 
@@ -459,8 +460,60 @@ export default function ChatServicePage() {
             ));
         }
 
-        // Keep processing state true until we get the actual response
-        // The polling effect will handle setting isProcessing to false when we get the response
+        // Start polling for response
+        let pollAttempts = 0;
+        const maxAttempts = 30; // 60 seconds maximum waiting time
+        const pollInterval = setInterval(async () => {
+            try {
+                const historyResponse = await fetch(`${apiUrl}/api/chat/history?sessionId=${activeChatId}`, {
+                    credentials: 'include'
+                });
+                
+                if (!historyResponse.ok) {
+                    throw new Error('Failed to fetch updates');
+                }
+                
+                const data: ChatHistoryResponse = await historyResponse.json();
+                
+                if (data.messages && Array.isArray(data.messages)) {
+                    const newMessages = data.messages
+                        .filter((msg: Message) => !msg.content.includes('Workflow was started'))
+                        .map((msg: Message) => ({
+                            ...msg,
+                            timestamp: msg.timestamp || Date.now()
+                        }));
+
+                    // Check if we have a new assistant message after our user message
+                    const userMessageIndex = newMessages.findIndex(
+                        (msg: Message) => msg.role === 'user' && msg.content === message.trim()
+                    );
+                    
+                    if (userMessageIndex !== -1 && 
+                        userMessageIndex < newMessages.length - 1 && 
+                        newMessages[userMessageIndex + 1].role === 'assistant') {
+                        setMessages(newMessages);
+                        setIsProcessing(false);
+                        clearInterval(pollInterval);
+                        return;
+                    }
+                }
+
+                pollAttempts++;
+                if (pollAttempts >= maxAttempts) {
+                    setIsProcessing(false);
+                    clearInterval(pollInterval);
+                    setMessages(prev => [...prev, createMessageWithTimestamp(
+                        'system',
+                        'Request timed out. Please try again.'
+                    )]);
+                }
+            } catch (error) {
+                console.error('Error polling for updates:', error);
+                setIsProcessing(false);
+                clearInterval(pollInterval);
+            }
+        }, 2000);
+
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         setMessages(prev => [...prev, createMessageWithTimestamp(
