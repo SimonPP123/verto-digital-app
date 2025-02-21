@@ -66,22 +66,25 @@ export default function ChatServicePage() {
               timestamp: msg.timestamp || Date.now()
             }));
             
-            // Only update if we have different messages
-            if (JSON.stringify(newMessages) !== JSON.stringify(messages)) {
-              // Filter out any "Workflow was started" messages
-              const filteredMessages = newMessages.filter(msg => 
-                !msg.content.includes('Workflow was started')
-              );
-              
+            // Filter out workflow started messages
+            const filteredMessages = newMessages.filter(msg => 
+              !msg.content.includes('Workflow was started')
+            );
+
+            // Check if we have a new complete response
+            const lastMessage = filteredMessages[filteredMessages.length - 1];
+            const lastUserMessage = filteredMessages.findLast(msg => msg.role === 'user');
+            const hasCompleteResponse = lastMessage && 
+              lastUserMessage && 
+              lastMessage.role === 'assistant' && 
+              lastMessage.timestamp > lastUserMessage.timestamp;
+
+            // Only update messages if they're different
+            if (JSON.stringify(filteredMessages) !== JSON.stringify(messages)) {
               setMessages(filteredMessages);
               
-              // If we got a new message from the assistant, stop processing
-              const hasNewAssistantMessage = filteredMessages.some(
-                msg => msg.role === 'assistant' && 
-                !messages.some(m => m.content === msg.content)
-              );
-              
-              if (hasNewAssistantMessage) {
+              // Stop processing if we have a complete response
+              if (hasCompleteResponse) {
                 setIsProcessing(false);
               }
             }
