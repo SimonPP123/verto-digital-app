@@ -34,6 +34,8 @@ export default function ChatServicePage() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [newChatName, setNewChatName] = useState('');
+  const [editingChatId, setEditingChatId] = useState<string | null>(null);
+  const [editingChatName, setEditingChatName] = useState('');
   const [selectedModel, setSelectedModel] = useState<string>(MODEL_OPTIONS[0].value);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -317,7 +319,7 @@ export default function ChatServicePage() {
                     ...prev,
                     createMessageWithTimestamp(
                         'system',
-                        `Available sheets: ${uploadedFile.sheetNames.join(', ')}\nPlease specify which sheet you would like to use from the Excel file.`
+                        `Available sheets in "${file.name}": ${uploadedFile.sheetNames.join(', ')}\n\nPlease specify which sheets you want to use by sending a message like:\n"Please use sheets: ${uploadedFile.sheetNames[0]}${uploadedFile.sheetNames[1] ? `, ${uploadedFile.sheetNames[1]}` : ''}"`
                     )
                 ]);
             }
@@ -338,7 +340,7 @@ export default function ChatServicePage() {
         } else {
             throw new Error(data.error || 'Failed to upload file');
         }
-    } catch (error) {
+      } catch (error) {
         console.error('Error uploading file:', error);
         setMessages(prev => [
             ...prev,
@@ -347,7 +349,7 @@ export default function ChatServicePage() {
                 `Error uploading file: ${error instanceof Error ? error.message : 'Unknown error'}`
             )
         ]);
-    } finally {
+      } finally {
         setIsProcessing(false);
         if (event.target) event.target.value = '';
     }
@@ -625,6 +627,29 @@ export default function ChatServicePage() {
     setMessages(prev => [...prev, messageWithTimestamp]);
   };
 
+  const handleRenameChat = async (chatId: string, newName: string) => {
+    try {
+      const response = await fetch(`${apiUrl}/api/chat/sessions/${chatId}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name: newName })
+      });
+      
+      if (response.ok) {
+        setChatSessions(prev => prev.map(chat => 
+          chat._id === chatId ? { ...chat, name: newName } : chat
+        ));
+        setEditingChatId(null);
+        setEditingChatName('');
+      }
+    } catch (error) {
+      console.error('Error renaming chat:', error);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -686,20 +711,66 @@ export default function ChatServicePage() {
                   onClick={() => setActiveChatId(chat._id)}
                 >
                   <div className="truncate flex-1">
-                    <div className="font-medium">{chat.name}</div>
-                    <div className="text-sm text-gray-400">
-                      {new Date(chat.lastActivity).toLocaleDateString()}
-                    </div>
+                    {editingChatId === chat._id ? (
+                      <input
+                        type="text"
+                        value={editingChatName}
+                        onChange={(e) => setEditingChatName(e.target.value)}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === 'Enter') {
+                            handleRenameChat(chat._id, editingChatName);
+                          } else if (e.key === 'Escape') {
+                            setEditingChatId(null);
+                            setEditingChatName('');
+                          }
+                        }}
+                        onBlur={() => {
+                          if (editingChatName.trim()) {
+                            handleRenameChat(chat._id, editingChatName);
+                          } else {
+                            setEditingChatId(null);
+                            setEditingChatName('');
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full px-2 py-1 bg-gray-600 text-white rounded border border-gray-500"
+                        autoFocus
+                      />
+                    ) : (
+                      <>
+                        <div className="font-medium">{chat.name}</div>
+                        <div className="text-sm text-gray-400">
+                          {new Date(chat.lastActivity).toLocaleDateString()}
+                        </div>
+                      </>
+                    )}
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteChat(chat._id);
-                    }}
-                    className="ml-2 text-gray-400 hover:text-red-500"
-                  >
-                    ×
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingChatId(chat._id);
+                        setEditingChatName(chat.name);
+                      }}
+                      className="text-gray-400 hover:text-blue-400 p-1"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteChat(chat._id);
+                      }}
+                      className="text-gray-400 hover:text-red-500 p-1"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -758,7 +829,7 @@ export default function ChatServicePage() {
         <div 
           ref={chatContainerRef}
           className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"
-          style={{ height: 'calc(100vh - 240px)' }}
+          style={{ height: 'calc(100vh - 160px)' }}
         >
           {messages.map((message, index) => (
             <div
@@ -773,7 +844,7 @@ export default function ChatServicePage() {
                 }`}
               >
                 {message.role === 'user' ? (
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                <p className="whitespace-pre-wrap">{message.content}</p>
                 ) : (
                   <div 
                     className="chat-content"
@@ -890,7 +961,8 @@ export default function ChatServicePage() {
             </button>
           </form>
           <div className="mt-1 text-xs text-gray-600">
-            <strong>File Upload Instructions:</strong> Upload one file at a time (max 10) • Send a message about each file • Supported: PDF, Excel, CSV
+            <strong>File Upload Instructions:</strong> Upload one file at a time (max 10) • Send a message about each file • Supported: PDF, Excel, CSV<br/>
+            <strong>For Excel Files:</strong> After upload, specify which sheets to use (comma-separated). Example: "Please use sheets: Sheet1, Sheet2"
           </div>
         </div>
       </div>

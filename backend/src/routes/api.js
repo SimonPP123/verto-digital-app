@@ -1079,9 +1079,9 @@ router.post('/chat/message', isAuthenticated, async (req, res) => {
             // Clear processing flag and save
             chatSession.isProcessing = false;
             chatSession.lastActivity = new Date();
-            await chatSession.save();
+    await chatSession.save();
 
-            res.json({ 
+    res.json({
                 message: responseContent,
                 totalTokens: chatSession.totalTokens,
                 tokenLimit: ChatSession.TOKEN_LIMIT
@@ -1470,7 +1470,7 @@ router.post('/chat/callback', express.text({ type: '*/*' }), async (req, res) =>
       isProcessing: false
     });
 
-    res.json({
+    res.json({ 
       success: true,
       message: 'HTML response processed successfully'
     });
