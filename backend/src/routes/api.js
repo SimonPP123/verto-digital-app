@@ -9,9 +9,45 @@ const Template = require('../models/Template');
 const ContentBrief = require('../models/ContentBrief');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs').promises;
+const fs = require('fs');
+const fsPromises = require('fs').promises;
 const FormData = require('form-data');
 const ChatSession = require('../models/ChatSession');
+
+// Create uploads directory if it doesn't exist
+const uploadDir = path.join(__dirname, '../../uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Configure multer for file upload
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['.pdf', '.xls', '.xlsx', '.csv'];
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (allowedTypes.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only PDF, XLS, XLSX, and CSV files are allowed.'));
+  }
+};
+
+const upload = multer({ 
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  }
+});
 
 // Middleware to check if user is authenticated
 const isAuthenticated = (req, res, next) => {
@@ -353,14 +389,153 @@ router.post('/n8n/run', isAuthenticated, async (req, res) => {
 });
 
 // File upload endpoint
-router.post('/upload', isAuthenticated, async (req, res) => {
+router.post('/chat/upload', upload.array('file', 5), async (req, res) => {
   try {
-    // Handle file upload logic here
-    // This is a placeholder for future implementation
-    res.status(501).json({ message: 'File upload not implemented yet' });
+    const files = req.files;
+    const { sessionId } = req.body;
+
+    if (!files || files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID is required' });
+    }
+
+    const chatSession = await ChatSession.findOne({ 
+      _id: sessionId,
+      user: req.user._id,
+      isActive: true 
+    });
+
+    if (!chatSession) {
+      return res.status(404).json({ error: 'Chat session not found' });
+    }
+
+    // Add files to the session's files array with binary data
+    const newFiles = files.map(file => ({
+      originalName: file.originalname,
+      path: file.path,
+      type: file.mimetype,
+      size: file.size,
+      status: 'pending',
+      uploadedAt: new Date(),
+      isProcessed: false,
+      binary: fs.readFileSync(file.path)
+    }));
+
+    chatSession.files.push(...newFiles);
+    await chatSession.save();
+
+    // Transform response to match frontend expectations
+    const responseFiles = newFiles.map((file, index) => ({
+      id: chatSession.files[chatSession.files.length - newFiles.length + index]._id.toString(),
+      name: file.originalName,
+      type: file.type,
+      size: file.size,
+      status: file.status,
+      path: file.path
+    }));
+
+    // Log successful upload
+    logger.info('Files uploaded successfully:', {
+      sessionId: chatSession._id,
+      fileCount: files.length,
+      files: responseFiles.map(f => ({
+        id: f.id,
+        name: f.name,
+        type: f.type,
+        size: f.size
+      }))
+    });
+
+    res.json({ 
+      message: 'Files uploaded successfully',
+      files: responseFiles
+    });
   } catch (error) {
     logger.error('File upload error:', error);
-    res.status(500).json({ error: 'Failed to upload file' });
+    res.status(500).json({ 
+      error: 'Error uploading files',
+      details: error.message 
+    });
+  }
+});
+
+// Remove file from chat session
+router.delete('/chat/files/:fileId', isAuthenticated, async (req, res) => {
+  try {
+    const { sessionId } = req.query;
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID is required' });
+    }
+
+    const chatSession = await ChatSession.findOne({ 
+      user: req.user._id,
+      _id: sessionId,
+      isActive: true
+    });
+
+    if (!chatSession) {
+      return res.status(404).json({ error: 'Chat session not found' });
+    }
+
+    const fileToRemove = chatSession.files.id(req.params.fileId);
+    if (!fileToRemove) {
+      return res.status(404).json({ error: 'File not found in session' });
+    }
+
+    // Delete the physical file
+    if (fileToRemove.path) {
+      try {
+        await fsPromises.unlink(fileToRemove.path);
+      } catch (err) {
+        logger.error('Error deleting physical file:', err);
+        // Continue even if physical file deletion fails
+      }
+    }
+
+    // Remove the file from the session using pull
+    chatSession.files.pull(req.params.fileId);
+    await chatSession.save();
+
+    res.json({ 
+      message: 'File removed successfully',
+      remainingFiles: chatSession.files.map(file => ({
+        id: file._id,
+        name: file.originalName,
+        type: file.type,
+        size: file.size,
+        status: file.status
+      }))
+    });
+  } catch (error) {
+    logger.error('Error removing file:', error);
+    res.status(500).json({ error: 'Failed to remove file' });
+  }
+});
+
+// Get files in chat session
+router.get('/chat/files', isAuthenticated, async (req, res) => {
+  try {
+    const chatSession = await ChatSession.findOne({ user: req.user._id });
+    if (!chatSession) {
+      return res.status(404).json({ error: 'Chat session not found' });
+    }
+
+    res.json({
+      files: chatSession.files.map(file => ({
+        id: file._id,
+        name: file.originalName,
+        type: file.type,
+        size: file.size,
+        status: file.status,
+        uploadedAt: file.uploadedAt
+      }))
+    });
+  } catch (error) {
+    logger.error('Error fetching files:', error);
+    res.status(500).json({ error: 'Failed to fetch files' });
   }
 });
 
@@ -644,175 +819,653 @@ router.delete('/content-briefs/:id', isAuthenticated, async (req, res) => {
   }
 });
 
-// Configure multer for file upload
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, path.join(__dirname, '../../uploads'))
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
-    cb(null, uniqueSuffix + path.extname(file.originalname))
-  }
-});
+// Add request validation middleware
+const validateN8nRequest = (req, res, next) => {
+  try {
+    const { message, selectedFileIds } = req.body;
+    const chatSession = req.chatSession;
 
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = ['.pdf', '.xls', '.xlsx', '.csv'];
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (allowedTypes.includes(ext)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Invalid file type. Only PDF, XLS, XLSX, and CSV files are allowed.'));
+    // Log the current state of files in the session
+    logger.info('Current files in session:', {
+      sessionId: chatSession._id,
+      totalFiles: chatSession.files.length,
+      files: chatSession.files.map(f => ({
+        id: f._id,
+        originalName: f.originalName,
+        isProcessed: f.isProcessed,
+        status: f.status
+      }))
+    });
+
+    // Get selected files if IDs are provided
+    const selectedFiles = selectedFileIds 
+      ? chatSession.files.filter(f => selectedFileIds.includes(f._id.toString()) && !f.isProcessed)
+      : chatSession.files.filter(f => !f.isProcessed);
+
+    logger.info('Selected unprocessed files:', {
+      count: selectedFiles.length,
+      files: selectedFiles.map(f => ({
+        id: f._id,
+        originalName: f.originalName,
+        type: f.type,
+        size: f.size
+      }))
+    });
+
+    // Store validated data for the next middleware
+    req.validatedData = {
+      message,
+      selectedFiles,
+      chatSession
+    };
+
+    next();
+  } catch (error) {
+    logger.error('Request validation error:', error);
+    res.status(400).json({ error: 'Invalid request data' });
   }
 };
 
-const upload = multer({ 
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  }
-});
-
-// Chat endpoints
-router.post('/chat/upload', isAuthenticated, upload.single('file'), async (req, res) => {
+// Add n8n request preparation middleware
+const prepareN8nRequest = (req, res, next) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
+    const { message, selectedFiles, chatSession } = req.validatedData;
 
-    // Create or update chat session
-    let chatSession = await ChatSession.findOne({ user: req.user._id });
-    if (!chatSession) {
-      chatSession = new ChatSession({ user: req.user._id });
-    }
+    // Prepare files data for n8n
+    const filesData = selectedFiles.map(file => ({
+      id: file._id.toString(),
+      name: file.originalName,
+      type: file.type,
+      size: file.size,
+      status: 'processing'
+    }));
 
-    // Update active file
-    chatSession.activeFile = {
-      originalName: req.file.originalname,
-      path: req.file.path,
-      type: path.extname(req.file.originalname).toLowerCase()
+    // Prepare the payload
+    const payload = {
+      data: {
+        action: filesData.length > 0 ? 'processFile' : 'sendMessage',
+        sessionId: chatSession._id.toString(),
+        chatInput: message,
+        files: filesData
+      },
+      webhookUrl: process.env.N8N_CHAT_WITH_FILES,
+      executionMode: 'production'
     };
 
-    await chatSession.save();
-
-    res.json({
-      message: 'File uploaded successfully',
-      fileInfo: {
-        name: req.file.originalname,
-        type: path.extname(req.file.originalname).toLowerCase()
-      }
+    // Log the prepared request
+    logger.info('Prepared n8n request:', {
+      action: payload.data.action,
+      sessionId: payload.data.sessionId,
+      messageLength: message.length,
+      filesCount: filesData.length,
+      files: filesData
     });
-  } catch (error) {
-    logger.error('File upload error:', error);
-    res.status(500).json({ error: 'Failed to upload file' });
-  }
-});
 
+    // Store prepared data for the next middleware
+    req.n8nRequest = {
+      payload,
+      selectedFiles
+    };
+
+    next();
+  } catch (error) {
+    logger.error('Request preparation error:', error);
+    res.status(500).json({ error: 'Failed to prepare request' });
+  }
+};
+
+// Chat message endpoint
 router.post('/chat/message', isAuthenticated, async (req, res) => {
-  try {
-    const { message } = req.body;
-    if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
-    }
-
-    // Get or create chat session
-    let chatSession = await ChatSession.findOne({ user: req.user._id });
-    if (!chatSession) {
-      chatSession = new ChatSession({ user: req.user._id });
-    }
-
-    // Handle reset command
-    if (message.toLowerCase().trim() === 'reset the chat') {
-      chatSession.messages = [];
-      if (chatSession.activeFile?.path) {
-        await fs.unlink(chatSession.activeFile.path).catch(err => 
-          logger.error('Error deleting file:', err)
-        );
-      }
-      chatSession.activeFile = null;
-      await chatSession.save();
-      return res.json({ message: 'Chat reset successfully' });
-    }
-
-    // Add user message
-    chatSession.messages.push({
-      role: 'user',
-      content: message
-    });
-
-    // Prepare n8n request
-    let n8nPayload = {
-      message,
-      sessionId: chatSession._id.toString()
-    };
-
-    // Add file if exists
-    if (chatSession.activeFile) {
-      const fileStream = fs.createReadStream(chatSession.activeFile.path);
-      const formData = new FormData();
-      formData.append('message', message);
-      formData.append('sessionId', chatSession._id.toString());
-      formData.append('file', fileStream, {
-        filename: chatSession.activeFile.originalName,
-        contentType: chatSession.activeFile.type === '.pdf' ? 'application/pdf' : 
-                    chatSession.activeFile.type === '.csv' ? 'text/csv' :
-                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      });
-
-      // Call n8n webhook with FormData
-      const n8nResponse = await axios.post(
-        process.env.N8N_CHAT_WITH_FILES,
-        formData,
-        {
-          headers: {
-            ...formData.getHeaders(),
-          }
+    try {
+        const { action, sessionId, chatInput: message, files } = req.body;
+        
+        if (!message || !sessionId) {
+            return res.status(400).json({ error: 'Message and session ID are required' });
         }
-      );
-    } else {
-      // Call n8n webhook without file
-      const n8nResponse = await axios.post(
-        process.env.N8N_CHAT_WITH_FILES,
-        n8nPayload,
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          }
+
+        // Get chat session
+        let chatSession = await ChatSession.findOne({ 
+            user: req.user._id,
+            _id: sessionId,
+            isActive: true 
+        });
+
+        if (!chatSession) {
+            return res.status(404).json({ error: 'Chat session not found' });
         }
-      );
+
+        // Check if already processing
+        if (chatSession.isProcessing) {
+            const thirtySecondsAgo = new Date(Date.now() - 30000);
+            if (chatSession.lastActivity < thirtySecondsAgo) {
+                logger.info('Resetting stuck processing state', {
+                    sessionId: chatSession._id,
+                    lastActivity: chatSession.lastActivity
+                });
+                chatSession.isProcessing = false;
+            } else {
+                return res.status(429).json({ error: 'A request is already being processed' });
+            }
+        }
+
+        // Set processing flag and save
+        chatSession.isProcessing = true;
+        chatSession.lastActivity = new Date();
+        await chatSession.save();
+
+        try {
+            // Add user message
+            const userMessage = {
+                role: 'user',
+                content: message,
+                timestamp: new Date(),
+                tokens: Math.ceil(message.length / 4)
+            };
+            chatSession.messages.push(userMessage);
+            await chatSession.save();
+
+            // Get pending files and prepare binary data
+            const pendingFiles = files ? await Promise.all(files.map(async (fileInfo) => {
+                const file = chatSession.files.find(f => 
+                    f.originalName === fileInfo.fileName && 
+                    !f.isProcessed
+                );
+                
+                if (!file) return null;
+
+                return {
+                    fileName: file.originalName,
+                    fileSize: fileInfo.fileSize,
+                    fileType: fileInfo.fileType,
+                    mimeType: file.type,
+                    fileExtension: fileInfo.fileExtension,
+                    binaryKey: fileInfo.binaryKey,
+                    path: file.path
+                };
+            })) : [];
+
+            // Filter out null values
+            const validFiles = pendingFiles.filter(f => f !== null);
+
+            // Create FormData
+            const formData = new FormData();
+
+            // Add each field separately instead of as a single JSON object
+            formData.append('action', 'sendMessage');
+            formData.append('sessionId', chatSession._id.toString());
+            formData.append('chatInput', message);
+
+            // Add files metadata as separate fields
+            validFiles.forEach((file, index) => {
+                formData.append(`files[${index}][fileName]`, file.fileName);
+                formData.append(`files[${index}][fileSize]`, file.fileSize);
+                formData.append(`files[${index}][fileType]`, file.fileType);
+                formData.append(`files[${index}][mimeType]`, file.mimeType);
+                formData.append(`files[${index}][fileExtension]`, file.fileExtension);
+                formData.append(`files[${index}][binaryKey]`, file.binaryKey);
+                
+                // Add the actual file
+                const fileStream = fs.createReadStream(file.path);
+                formData.append(file.binaryKey, fileStream, {
+                    filename: file.fileName,
+                    contentType: file.mimeType
+                });
+            });
+
+            // Send to n8n webhook with FormData
+            const response = await axios.post(process.env.N8N_CHAT_WITH_FILES, formData, {
+                headers: {
+                    ...formData.getHeaders(),
+                    'Accept': 'application/json'
+                },
+                timeout: 30000,
+                maxBodyLength: Infinity
+            });
+
+            // Mark files as processed
+            if (validFiles.length > 0) {
+                for (const file of validFiles) {
+                    const fileInSession = chatSession.files.find(f => f.originalName === file.fileName);
+                    if (fileInSession) {
+                        fileInSession.isProcessed = true;
+                        fileInSession.status = 'processed';
+                    }
+                }
+                await chatSession.save();
+            }
+
+            // Add assistant's response
+            const responseContent = typeof response.data === 'string' 
+                ? response.data 
+                : response.data.message || JSON.stringify(response.data);
+            const responseTokens = Math.ceil(responseContent.length / 4);
+            const assistantMessage = {
+                role: 'assistant',
+                content: responseContent,
+                tokens: responseTokens,
+                timestamp: new Date()
+            };
+            chatSession.messages.push(assistantMessage);
+            chatSession.totalTokens += responseTokens;
+
+            // Check token limit
+            if (chatSession.totalTokens > ChatSession.TOKEN_CLEANUP_THRESHOLD) {
+                while (chatSession.totalTokens > ChatSession.TOKEN_CLEANUP_THRESHOLD && chatSession.messages.length > 2) {
+                    const removed = chatSession.messages.shift();
+                    chatSession.totalTokens -= removed.tokens;
+                }
+            }
+
+            // Clear processing flag and save
+            chatSession.isProcessing = false;
+            chatSession.lastActivity = new Date();
+            await chatSession.save();
+
+            res.json({ 
+                message: responseContent,
+                totalTokens: chatSession.totalTokens,
+                tokenLimit: ChatSession.TOKEN_LIMIT
+            });
+        } catch (error) {
+            chatSession.isProcessing = false;
+            chatSession.lastActivity = new Date();
+            await chatSession.save();
+            throw error;
+        }
+    } catch (error) {
+        logger.error('Chat message error:', error);
+        res.status(500).json({ 
+            error: 'Failed to process chat message',
+            details: error.message
+        });
     }
-
-    // Add assistant response
-    chatSession.messages.push({
-      role: 'assistant',
-      content: n8nResponse.data.response
-    });
-
-    await chatSession.save();
-
-    res.json({
-      message: n8nResponse.data.response
-    });
-  } catch (error) {
-    logger.error('Chat message error:', error);
-    res.status(500).json({ error: 'Failed to process message' });
-  }
 });
 
 router.get('/chat/history', isAuthenticated, async (req, res) => {
   try {
-    const chatSession = await ChatSession.findOne({ user: req.user._id });
-    if (!chatSession) {
-      return res.json({ messages: [] });
+    const { sessionId } = req.query;
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID is required' });
     }
+
+    // Find the specific chat session for this user
+    const chatSession = await ChatSession.findOne({
+      _id: sessionId,
+      user: req.user._id,
+      isActive: true
+    });
+
+    if (!chatSession) {
+      logger.error('Chat session not found:', {
+        sessionId,
+        userId: req.user._id
+      });
+      return res.status(404).json({ error: 'Chat session not found' });
+    }
+
+    // Log the raw session data for debugging
+    logger.info('Raw chat history data:', {
+      sessionId: chatSession._id,
+      messageCount: chatSession.messages?.length || 0,
+      fileCount: chatSession.files?.length || 0,
+      rawMessages: chatSession.messages,
+      rawFiles: chatSession.files
+    });
+
+    // Transform the data to match frontend expectations
+    const response = {
+      messages: chatSession.messages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.timestamp ? msg.timestamp.getTime() : Date.now()
+      })),
+      files: chatSession.files.map(file => ({
+        id: file._id.toString(),
+        name: file.originalName || file.name,
+        type: file.type,
+        size: file.size,
+        status: file.status || 'pending'
+      }))
+    };
+
+    logger.info('Transformed chat history data:', {
+      sessionId: chatSession._id,
+      messageCount: response.messages.length,
+      fileCount: response.files.length,
+      transformedMessages: response.messages,
+      transformedFiles: response.files
+    });
+
+    res.json(response);
+  } catch (error) {
+    logger.error('Chat history error:', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user._id
+    });
+    res.status(500).json({ error: 'Failed to fetch chat history' });
+  }
+});
+
+// Reset chat endpoint
+router.post('/chat/reset', isAuthenticated, async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID is required' });
+    }
+
+    const chatSession = await ChatSession.findOne({ 
+      _id: sessionId,
+      user: req.user._id,
+      isActive: true 
+    });
+
+    if (!chatSession) {
+      return res.status(404).json({ error: 'Chat session not found' });
+    }
+
+    // Delete all uploaded files
+    for (const file of chatSession.files) {
+      if (file.path) {
+        try {
+          await fsPromises.unlink(file.path);
+          logger.info(`Deleted file: ${file.path}`);
+        } catch (err) {
+          logger.error('Error deleting file:', err);
+          // Continue even if file deletion fails
+        }
+      }
+    }
+
+    // Add reset message to chat history
+    chatSession.messages.push({
+      role: 'user',
+      content: 'reset the chat',
+      timestamp: new Date(),
+      tokens: 4
+    });
+
+    // Add system message about reset
+    chatSession.messages.push({
+      role: 'system',
+      content: 'Chat has been reset. Previous context and files have been cleared.',
+      timestamp: new Date(),
+      tokens: 12
+    });
+
+    // Reset files and processing state
+    chatSession.files = [];
+    chatSession.isProcessing = false;
+    await chatSession.save();
+
+    // Send reset notification to n8n
+    try {
+      await axios.post(process.env.N8N_CHAT_WITH_FILES, {
+        data: {
+          action: 'resetChat',
+          sessionId: chatSession._id.toString(),
+          chatInput: 'reset the chat'
+        }
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch (error) {
+      logger.error('Error notifying n8n of reset:', error);
+      // Continue even if n8n notification fails
+    }
+
     res.json({ 
-      messages: chatSession.messages,
-      hasActiveFile: !!chatSession.activeFile,
-      activeFileName: chatSession.activeFile?.originalName
+      message: 'Chat session reset successfully',
+      messages: chatSession.messages.slice(-2) // Return the last two messages
     });
   } catch (error) {
-    logger.error('Chat history error:', error);
-    res.status(500).json({ error: 'Failed to fetch chat history' });
+    logger.error('Reset chat error:', error);
+    res.status(500).json({ error: 'Failed to reset chat' });
+  }
+});
+
+// Get all chat sessions
+router.get('/chat/sessions', isAuthenticated, async (req, res) => {
+  try {
+    const sessions = await ChatSession.find({ 
+      user: req.user._id,
+      isActive: true 
+    })
+    .select('name lastActivity totalTokens isProcessing')
+    .sort({ lastActivity: -1 });
+
+    res.json(sessions);
+  } catch (error) {
+    logger.error('Error fetching chat sessions:', error);
+    res.status(500).json({ error: 'Failed to fetch chat sessions' });
+  }
+});
+
+// Create new chat session
+router.post('/chat/sessions', isAuthenticated, async (req, res) => {
+  try {
+    const { name } = req.body;
+    const session = new ChatSession({
+      name: name || `Chat ${new Date().toLocaleString()}`,
+      user: req.user._id,
+      messages: [],
+      files: [],
+      totalTokens: 0,
+      isProcessing: false,
+      isActive: true,
+      lastActivity: new Date()
+    });
+    await session.save();
+    res.status(201).json(session);
+  } catch (error) {
+    logger.error('Error creating chat session:', error);
+    res.status(500).json({ error: 'Failed to create chat session' });
+  }
+});
+
+// Get specific chat session
+router.get('/chat/sessions/:sessionId', isAuthenticated, async (req, res) => {
+  try {
+    const session = await ChatSession.findOne({
+      _id: req.params.sessionId,
+      user: req.user._id,
+      isActive: true
+    });
+
+    if (!session) {
+      logger.error('Chat session not found:', {
+        sessionId: req.params.sessionId,
+        userId: req.user._id
+      });
+      return res.status(404).json({ error: 'Chat session not found' });
+    }
+
+    // Log the raw session data for debugging
+    logger.info('Raw chat session data:', {
+      sessionId: session._id,
+      messageCount: session.messages?.length || 0,
+      fileCount: session.files?.length || 0,
+      rawMessages: session.messages,
+      rawFiles: session.files
+    });
+
+    // Transform the data to match frontend expectations
+    const response = {
+      messages: session.messages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.timestamp ? msg.timestamp.getTime() : Date.now()
+      })),
+      files: session.files.map(file => ({
+        id: file._id.toString(),
+        name: file.originalName || file.name,
+        type: file.type,
+        size: file.size,
+        status: file.status || 'pending'
+      }))
+    };
+
+    logger.info('Transformed chat session data:', {
+      sessionId: session._id,
+      messageCount: response.messages.length,
+      fileCount: response.files.length,
+      transformedMessages: response.messages,
+      transformedFiles: response.files
+    });
+
+    res.json(response);
+  } catch (error) {
+    logger.error('Error fetching chat session:', {
+      error: error.message,
+      stack: error.stack,
+      sessionId: req.params.sessionId,
+      userId: req.user._id
+    });
+    res.status(500).json({ error: 'Failed to fetch chat session' });
+  }
+});
+
+// Update chat session
+router.put('/chat/sessions/:sessionId', isAuthenticated, async (req, res) => {
+  try {
+    const { name } = req.body;
+    const session = await ChatSession.findOneAndUpdate(
+      { _id: req.params.sessionId, user: req.user._id },
+      { name },
+      { new: true }
+    );
+
+    if (!session) {
+      return res.status(404).json({ error: 'Chat session not found' });
+    }
+
+    res.json(session);
+  } catch (error) {
+    logger.error('Error updating chat session:', error);
+    res.status(500).json({ error: 'Failed to update chat session' });
+  }
+});
+
+// Delete chat session (soft delete)
+router.delete('/chat/sessions/:sessionId', isAuthenticated, async (req, res) => {
+  try {
+    const session = await ChatSession.findOne({
+      _id: req.params.sessionId,
+      user: req.user._id
+    });
+
+    if (!session) {
+      return res.status(404).json({ error: 'Chat session not found' });
+    }
+
+    // Delete all uploaded files
+    for (const file of session.files) {
+      if (file.path) {
+        try {
+          await fsPromises.unlink(file.path);
+        } catch (err) {
+          logger.error('Error deleting file:', err);
+          // Continue even if file deletion fails
+        }
+      }
+    }
+
+    // Soft delete by marking as inactive
+    session.isActive = false;
+    await session.save();
+
+    res.json({ message: 'Chat session deleted successfully' });
+  } catch (error) {
+    logger.error('Error deleting chat session:', error);
+    res.status(500).json({ error: 'Failed to delete chat session' });
+  }
+});
+
+// Receive chat response callback
+router.post('/chat/callback', express.text({ type: '*/*' }), async (req, res) => {
+  try {
+    logger.info('Received callback request:', {
+      contentType: req.headers['content-type'],
+      body: req.body,
+      query: req.query
+    });
+
+    let sessionId, message, error;
+
+    // Handle different content types
+    if (req.headers['content-type']?.includes('application/json')) {
+      try {
+        const jsonData = JSON.parse(req.body);
+        sessionId = jsonData.sessionId;
+        message = jsonData.message;
+        error = jsonData.error;
+      } catch (e) {
+        logger.error('Error parsing JSON body:', e);
+      }
+    }
+
+    // If we couldn't get sessionId from body, try query params
+    if (!sessionId) {
+      sessionId = req.query.sessionId;
+      message = req.body; // For text/html, use the raw body as message
+    }
+
+    if (!sessionId) {
+      logger.error('No session ID provided in request');
+      return res.status(400).json({ error: 'Session ID is required' });
+    }
+    
+    logger.info('Processing chat response callback:', {
+      sessionId,
+      messagePreview: message ? message.substring(0, 100) + '...' : null,
+      error
+    });
+
+    // Find the chat session
+    const chatSession = await ChatSession.findById(sessionId);
+    if (!chatSession) {
+      logger.error('Chat session not found:', { sessionId });
+      return res.status(404).json({ error: 'Chat session not found' });
+    }
+
+    if (error) {
+      // Add error message to chat
+      chatSession.messages.push({
+        role: 'system',
+        content: `Error: ${error}`,
+        timestamp: new Date(),
+        tokens: Math.ceil(error.length / 4)
+      });
+    } else if (message) {
+      // Add assistant's response
+      chatSession.messages.push({
+        role: 'assistant',
+        content: message,
+        timestamp: new Date(),
+        tokens: Math.ceil(message.length / 4)
+      });
+    }
+
+    // Update session
+    chatSession.isProcessing = false;
+    chatSession.lastActivity = new Date();
+    await chatSession.save();
+
+    res.json({
+      success: true,
+      message: 'Response processed successfully'
+    });
+  } catch (error) {
+    logger.error('Error processing chat callback:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process chat response',
+      error: error.message
+    });
   }
 });
 
