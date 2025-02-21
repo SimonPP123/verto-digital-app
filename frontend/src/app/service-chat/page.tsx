@@ -68,12 +68,19 @@ export default function ChatServicePage() {
             
             // Only update if we have different messages
             if (JSON.stringify(newMessages) !== JSON.stringify(messages)) {
-              setMessages(newMessages);
+              // Filter out any "Workflow was started" messages
+              const filteredMessages = newMessages.filter(msg => 
+                !msg.content.includes('Workflow was started')
+              );
+              
+              setMessages(filteredMessages);
+              
               // If we got a new message from the assistant, stop processing
-              const hasNewAssistantMessage = newMessages.some(
+              const hasNewAssistantMessage = filteredMessages.some(
                 msg => msg.role === 'assistant' && 
                 !messages.some(m => m.content === msg.content)
               );
+              
               if (hasNewAssistantMessage) {
                 setIsProcessing(false);
               }
@@ -437,13 +444,15 @@ export default function ChatServicePage() {
                     : file
             ));
         }
+
+        // Keep processing state true until we get the actual response
+        // The polling effect will handle setting isProcessing to false when we get the response
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         setMessages(prev => [...prev, createMessageWithTimestamp(
             'system',
             `Error: ${errorMessage}`
         )]);
-    } finally {
         setIsProcessing(false);
     }
   };
