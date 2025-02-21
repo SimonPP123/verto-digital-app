@@ -460,6 +460,12 @@ export default function ChatServicePage() {
             ));
         }
 
+        // Add processing message
+        setMessages(prev => [...prev, createMessageWithTimestamp(
+            'system',
+            'Processing your request...'
+        )]);
+
         // Start polling for response
         let pollAttempts = 0;
         const maxAttempts = 30; // 60 seconds maximum waiting time
@@ -483,18 +489,27 @@ export default function ChatServicePage() {
                             timestamp: msg.timestamp || Date.now()
                         }));
 
-                    // Check if we have a new assistant message after our user message
+                    // Find the index of our user message
                     const userMessageIndex = newMessages.findIndex(
                         (msg: Message) => msg.role === 'user' && msg.content === message.trim()
                     );
-                    
-                    if (userMessageIndex !== -1 && 
-                        userMessageIndex < newMessages.length - 1 && 
-                        newMessages[userMessageIndex + 1].role === 'assistant') {
-                        setMessages(newMessages);
-                        setIsProcessing(false);
-                        clearInterval(pollInterval);
-                        return;
+
+                    if (userMessageIndex !== -1) {
+                        // Get all messages up to and including the next assistant message
+                        let endIndex = userMessageIndex + 1;
+                        while (endIndex < newMessages.length && newMessages[endIndex].role !== 'assistant') {
+                            endIndex++;
+                        }
+                        if (endIndex < newMessages.length) {
+                            // Remove the processing message and update with all messages
+                            setMessages(prev => prev.filter(msg => 
+                                msg.role !== 'system' || !msg.content.includes('Processing your request')
+                            ));
+                            setMessages(newMessages);
+                            setIsProcessing(false);
+                            clearInterval(pollInterval);
+                            return;
+                        }
                     }
                 }
 
