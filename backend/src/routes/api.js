@@ -917,7 +917,7 @@ const prepareN8nRequest = (req, res, next) => {
 // Chat message endpoint
 router.post('/chat/message', isAuthenticated, async (req, res) => {
     try {
-        const { action, sessionId, chatInput: message, files } = req.body;
+        const { action, sessionId, chatInput: message, files, model } = req.body;
         
         if (!message || !sessionId) {
             return res.status(400).json({ error: 'Message and session ID are required' });
@@ -990,10 +990,13 @@ router.post('/chat/message', isAuthenticated, async (req, res) => {
             // Create FormData
             const formData = new FormData();
 
-            // Add each field separately instead of as a single JSON object
+            // Add each field separately
             formData.append('action', 'sendMessage');
             formData.append('sessionId', chatSession._id.toString());
             formData.append('chatInput', message);
+            if (model) {
+                formData.append('model', model);
+            }
 
             // Add files metadata as separate fields
             validFiles.forEach((file, index) => {
