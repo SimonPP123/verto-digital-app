@@ -38,6 +38,53 @@ export default function ChatServicePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
+  // Add polling effect
+  useEffect(() => {
+    let pollInterval: NodeJS.Timeout;
+
+    if (isProcessing && activeChatId) {
+      // Poll every 2 seconds while processing
+      pollInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`${apiUrl}/api/chat/history?sessionId=${activeChatId}`, {
+            credentials: 'include'
+          });
+          
+          if (!response.ok) {
+            throw new Error('Failed to fetch updates');
+          }
+          
+          const data: ChatHistoryResponse = await response.json();
+          
+          // Update messages if we have new ones
+          if (data.messages && Array.isArray(data.messages)) {
+            setMessages(data.messages.map(msg => ({
+              ...msg,
+              timestamp: msg.timestamp || Date.now()
+            })));
+          }
+          
+          // Check if processing is complete
+          const session = await fetch(`${apiUrl}/api/chat/sessions/${activeChatId}`, {
+            credentials: 'include'
+          }).then(res => res.json());
+          
+          if (!session.isProcessing) {
+            setIsProcessing(false);
+          }
+        } catch (error) {
+          console.error('Error polling for updates:', error);
+        }
+      }, 2000);
+    }
+
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [isProcessing, activeChatId, apiUrl]);
+
   // Fetch chat sessions on mount
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
