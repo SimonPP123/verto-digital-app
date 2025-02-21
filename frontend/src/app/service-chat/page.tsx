@@ -788,10 +788,10 @@ export default function ChatServicePage() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col h-screen">
         {/* Header */}
-        <div className="p-2 bg-gray-50 border-b border-gray-200">
+        <div className="p-1 bg-gray-50 border-b border-gray-200">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-xl font-bold text-gray-900">
+              <h1 className="text-lg font-bold text-gray-900">
                 {chatSessions.find(chat => chat._id === activeChatId)?.name || 'Chat with Files'}
               </h1>
             </div>
@@ -812,12 +812,12 @@ export default function ChatServicePage() {
 
           {/* Active Files List */}
           {activeFiles.length > 0 && (
-            <div className="mt-1">
+            <div className="mt-0.5">
               <div className="flex flex-wrap gap-1">
                 {activeFiles.map((file) => (
                   <div
                     key={file.id}
-                    className={`flex items-center px-2 py-0.5 text-sm rounded-lg ${
+                    className={`flex items-center px-1.5 py-0.5 text-xs rounded-lg ${
                       file.status === 'processed' ? 'bg-green-100' : 'bg-yellow-100'
                     }`}
                   >
@@ -835,8 +835,8 @@ export default function ChatServicePage() {
         {/* Chat Messages */}
         <div 
           ref={chatContainerRef}
-          className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"
-          style={{ height: 'calc(100vh - 240px)' }}
+          className="flex-1 overflow-y-auto p-3 space-y-3 bg-gray-50"
+          style={{ height: 'calc(100vh - 160px)' }}
         >
           {messages.map((message, index) => (
             <div
@@ -844,7 +844,7 @@ export default function ChatServicePage() {
               className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[80%] rounded-lg p-3 ${
+                className={`max-w-[95%] rounded-lg p-3 ${
                   message.role === 'user'
                     ? 'bg-blue-600 text-white'
                     : 'bg-white shadow-md text-gray-900'
@@ -897,7 +897,7 @@ export default function ChatServicePage() {
               className="flex-1 rounded-md border-gray-300 shadow-sm 
                 focus:border-blue-500 focus:ring-blue-500
                 disabled:opacity-50 disabled:cursor-not-allowed
-                resize-y min-h-[40px] max-h-[80px] p-2
+                resize-y min-h-[35px] max-h-[70px] p-1.5
                 text-base leading-relaxed"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -966,9 +966,9 @@ export default function ChatServicePage() {
               </svg>
             </button>
           </form>
-          <div className="mt-1 text-xs text-gray-600">
-            <strong>File Upload Instructions:</strong> Upload one file at a time (max 10) • Send a message about each file • Supported: PDF, Excel, CSV<br/>
-            <strong>For Excel Files:</strong> After upload, specify which sheets to use (comma-separated). Example: "Please use sheets: Sheet1, Sheet2"
+          <div className="mt-0.5 text-xs text-gray-600">
+            <strong>File Upload Instructions:</strong> Upload one file at a time (max 10) • Send a message about each file • Supported: PDF, Excel, CSV •
+            <strong> Excel Files:</strong> After upload, specify sheets (comma-separated). Example: "Use: Sheet1, Sheet2"
           </div>
         </div>
       </div>
