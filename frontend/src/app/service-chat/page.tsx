@@ -604,7 +604,6 @@ export default function ChatServicePage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          action: 'resetChat',
           sessionId: activeChatId,
           chatInput: 'reset the chat'
         }),

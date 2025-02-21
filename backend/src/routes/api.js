@@ -1223,11 +1223,9 @@ router.post('/chat/reset', isAuthenticated, async (req, res) => {
     // Send reset notification to n8n
     try {
       await axios.post(process.env.N8N_CHAT_WITH_FILES, {
-        data: {
-          action: 'resetChat',
-          sessionId: chatSession._id.toString(),
-          chatInput: 'reset the chat'
-        }
+        action: 'resetChat',
+        sessionId: chatSession._id.toString(),
+        chatInput: 'reset the chat'
       }, {
         headers: {
           'Content-Type': 'application/json'
