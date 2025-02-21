@@ -65,27 +65,23 @@ export default function ChatServicePage() {
               ...msg,
               timestamp: msg.timestamp || Date.now()
             }));
-            
-            // Filter out workflow started messages
+
+            // Filter out any "Workflow was started" messages
             const filteredMessages = newMessages.filter(msg => 
               !msg.content.includes('Workflow was started')
             );
 
-            // Check if we have a new complete response
-            const lastMessage = filteredMessages[filteredMessages.length - 1];
-            const lastUserMessage = filteredMessages.findLast(msg => msg.role === 'user');
-            const hasCompleteResponse = lastMessage && 
-              lastUserMessage && 
-              lastMessage.role === 'assistant' && 
-              lastMessage.timestamp > lastUserMessage.timestamp;
-
-            // Only update messages if they're different
+            // Only update if messages have changed
             if (JSON.stringify(filteredMessages) !== JSON.stringify(messages)) {
               setMessages(filteredMessages);
-              
-              // Stop processing if we have a complete response
-              if (hasCompleteResponse) {
+
+              // Check if we have a complete response
+              const lastMessage = filteredMessages[filteredMessages.length - 1];
+              if (lastMessage && 
+                  lastMessage.role === 'assistant' && 
+                  lastMessage.content.includes("Please go ahead and ask your questions")) {
                 setIsProcessing(false);
+                clearInterval(pollInterval);
               }
             }
           }
@@ -280,9 +276,9 @@ export default function ChatServicePage() {
         formData.append('sessionId', activeChatId);
 
         const response = await fetch(`${apiUrl}/api/chat/upload`, {
-            method: 'POST',
-            credentials: 'include',
-            body: formData,
+          method: 'POST',
+          credentials: 'include',
+          body: formData,
         });
 
         const data = await response.json();
@@ -322,7 +318,7 @@ export default function ChatServicePage() {
         } else {
             throw new Error(data.error || 'Failed to upload file');
         }
-    } catch (error) {
+      } catch (error) {
         console.error('Error uploading file:', error);
         setMessages(prev => [
             ...prev,
@@ -331,7 +327,7 @@ export default function ChatServicePage() {
                 `Error uploading file: ${error instanceof Error ? error.message : 'Unknown error'}`
             )
         ]);
-    } finally {
+      } finally {
         setIsProcessing(false);
         if (event.target) event.target.value = '';
     }
@@ -467,7 +463,7 @@ export default function ChatServicePage() {
 
   const handleReset = async () => {
     if (!activeChatId) return;
-    
+
     try {
       setIsProcessing(true);
 
@@ -629,7 +625,7 @@ export default function ChatServicePage() {
               </h1>
             </div>
           </div>
-          
+
           {/* Active Files List */}
           {activeFiles.length > 0 && (
             <div className="mt-4 space-y-2">
@@ -680,8 +676,8 @@ export default function ChatServicePage() {
                 <div className="flex items-center space-x-2">
                   {[1, 2, 3].map((i) => (
                     <div key={`loading-dot-${i}`} className="animate-pulse">
-                      <div className="h-2 w-2 bg-gray-400 rounded-full"></div>
-                    </div>
+                    <div className="h-2 w-2 bg-gray-400 rounded-full"></div>
+                  </div>
                   ))}
                 </div>
               </div>
