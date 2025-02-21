@@ -419,10 +419,13 @@ router.post('/chat/upload', upload.array('file', 5), async (req, res) => {
       // If file is Excel, read sheet names
       if (file.mimetype.includes('spreadsheet') || file.originalname.match(/\.(xlsx|xls)$/i)) {
         try {
+          console.log('Reading Excel file:', file.path);
           const workbook = XLSX.readFile(file.path);
           sheetNames = workbook.SheetNames;
+          console.log('Found sheet names:', sheetNames);
         } catch (err) {
           logger.error('Error reading Excel sheet names:', err);
+          console.error('Excel read error:', err);
         }
       }
 

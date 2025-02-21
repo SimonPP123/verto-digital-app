@@ -315,10 +315,12 @@ export default function ChatServicePage() {
             ]);
 
             // For Excel files, show sheet names
-            if ((file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) && uploadedFile.sheetNames) {
+            if ((file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
                 const sheetMessage = uploadedFile.sheetNames && uploadedFile.sheetNames.length > 0
-                    ? `Available sheets in "${decodedFileName}": ${uploadedFile.sheetNames.join(', ')}\n\nPlease specify which sheets you want to use by sending a message like:\n"Please use sheets: ${uploadedFile.sheetNames[0]}${uploadedFile.sheetNames[1] ? `, ${uploadedFile.sheetNames[1]}` : ''}"`
+                    ? `Available sheets in "${decodedFileName}":\n${uploadedFile.sheetNames.join(', ')}\n\nPlease specify which sheets you want to use by sending a message like:\n"Please use sheets: ${uploadedFile.sheetNames[0]}${uploadedFile.sheetNames[1] ? `, ${uploadedFile.sheetNames[1]}` : ''}"`
                     : `Unable to read sheets from "${decodedFileName}". Please make sure the file is not corrupted and try again.`;
+                
+                console.log('Excel file uploaded, sheet names:', uploadedFile.sheetNames);
                 
                 setMessages(prev => [
                     ...prev,
@@ -421,11 +423,11 @@ export default function ChatServicePage() {
     setIsProcessing(true);
 
     try {
-        // Get all pending files
+        // Get all pending files (if any)
         const pendingFiles = activeFiles.filter(file => file.status === 'pending');
         
-        // Format files data according to the required structure
-        const formattedFiles = pendingFiles.map((file, index) => ({
+        // Format files data only if there are pending files
+        const formattedFiles = pendingFiles.length > 0 ? pendingFiles.map((file, index) => ({
             fileName: file.name,
             fileSize: file.size > 1024 * 1024 
                 ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
@@ -434,7 +436,7 @@ export default function ChatServicePage() {
             mimeType: file.type,
             fileExtension: file.name.split('.').pop() || '',
             binaryKey: `data${index}`
-        }));
+        })) : [];
 
         const response = await fetch(`${apiUrl}/api/chat/message`, {
             method: 'POST',
@@ -556,9 +558,9 @@ export default function ChatServicePage() {
     }
   };
 
-  // Add a helper function to check if we can send a message
+  // Modify the canSendMessage function to allow messages without files
   const canSendMessage = () => {
-    return !isProcessing && activeChatId && activeFiles.length > 0;
+    return !isProcessing && activeChatId;
   };
 
   const handleReset = async () => {
@@ -834,7 +836,7 @@ export default function ChatServicePage() {
         <div 
           ref={chatContainerRef}
           className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"
-          style={{ height: 'calc(100vh - 140px)' }}
+          style={{ height: 'calc(100vh - 240px)' }}
         >
           {messages.map((message, index) => (
             <div
@@ -888,7 +890,6 @@ export default function ChatServicePage() {
               ref={messageInputRef}
               rows={1}
               placeholder={!activeChatId ? "Select or create a chat to start..." :
-                activeFiles.length === 0 ? "Please upload a file first..." :
                 isProcessing ? "Processing previous request... Please wait..." :
                 "Type your message..."
               }
