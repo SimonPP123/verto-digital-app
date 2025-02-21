@@ -802,27 +802,6 @@ export default function ChatServicePage() {
               </select>
             </div>
           </div>
-
-          {/* Active Files List */}
-          {activeFiles.length > 0 && (
-            <div className="mt-1">
-              <div className="flex flex-wrap gap-1">
-                {activeFiles.map((file) => (
-                  <div
-                    key={file.id}
-                    className={`flex items-center px-2 py-0.5 text-sm rounded-lg ${
-                      file.status === 'processed' ? 'bg-green-100' : 'bg-yellow-100'
-                    }`}
-                  >
-                    <div className="flex items-center">
-                      <span className="mr-1">📄</span>
-                      <span>{file.name}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Chat Messages */}
@@ -959,6 +938,28 @@ export default function ChatServicePage() {
               </svg>
             </button>
           </form>
+          
+          {/* Active Files List - Moved here */}
+          {activeFiles.length > 0 && (
+            <div className="mt-2 mb-2">
+              <div className="flex flex-wrap gap-1">
+                {activeFiles.map((file) => (
+                  <div
+                    key={file.id}
+                    className={`flex items-center px-2 py-0.5 text-sm rounded-lg ${
+                      file.status === 'processed' ? 'bg-green-100' : 'bg-yellow-100'
+                    }`}
+                  >
+                    <div className="flex items-center">
+                      <span className="mr-1">📄</span>
+                      <span>{file.name}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="mt-1 text-xs text-gray-600">
             <strong>File Upload Instructions:</strong> Upload one file at a time (max 10) • Send a message about each file • Supported: PDF, Excel, CSV<br/>
             <strong>For Excel Files:</strong> After upload, specify which sheets to use (comma-separated). Example: "Please use sheets: Sheet1, Sheet2"
