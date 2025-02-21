@@ -126,8 +126,10 @@ export default function ChatServicePage() {
   useEffect(() => {
     if (activeChatId && !isLoading) {
       console.log('Active chat changed, fetching history for:', activeChatId);
-      // Clear current messages and files before fetching new ones
-      setMessages([]);
+      // Only clear messages if we're not showing the welcome message
+      if (!messages.some(msg => msg.content.includes('Welcome to Chat with Files!'))) {
+        setMessages([]);
+      }
       setActiveFiles([]);
       setSelectedFiles([]);
       setSelectedFileIds([]);
@@ -266,7 +268,11 @@ export default function ChatServicePage() {
             ...msg,
             timestamp: msg.timestamp || Date.now()
           }));
-        setMessages(filteredMessages);
+
+        // Only update messages if we have history or if there's no welcome message
+        if (filteredMessages.length > 0 || !messages.some(msg => msg.content.includes('Welcome to Chat with Files!'))) {
+          setMessages(filteredMessages);
+        }
       }
       
       if (data.files && Array.isArray(data.files)) {
@@ -714,7 +720,7 @@ export default function ChatServicePage() {
         {isSidebarOpen && (
           <>
             <div className="p-4 border-b border-gray-700">
-              <input
+            <input
                 type="text"
                 value={newChatName}
                 onChange={(e) => setNewChatName(e.target.value)}
@@ -727,8 +733,8 @@ export default function ChatServicePage() {
               >
                 New Chat
               </button>
-            </div>
-            
+          </div>
+
             <div className="flex-1 overflow-y-auto">
               {chatSessions.map(chat => (
                 <div
