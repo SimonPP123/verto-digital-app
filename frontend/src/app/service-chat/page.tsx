@@ -183,7 +183,35 @@ export default function ChatServicePage() {
         setChatSessions(prev => [newChat, ...prev]);
         setActiveChatId(newChat._id);
         setNewChatName('');
-        setMessages([]);
+        setMessages([
+          {
+            role: 'assistant',
+            content: `
+              <div class="chat-message prose max-w-none text-gray-900">
+                <h2>👋 Welcome to Chat with Files!</h2>
+                <p>Before we begin, I recommend watching this quick overview of how to use the tool:</p>
+                <div class="aspect-w-16 aspect-h-9 mt-4 mb-4">
+                  <iframe
+                    src="https://www.loom.com/embed/5f682bd7d5524f5c841a5464d1014e86?sid=21a8fc2d-ca88-4749-8798-372fbd894db0"
+                    frameborder="0"
+                    webkitallowfullscreen
+                    mozallowfullscreen
+                    allowfullscreen
+                    style="width: 100%; height: 400px;"
+                  ></iframe>
+                </div>
+                <p>You can now:</p>
+                <ul>
+                  <li>Upload files (PDF, Excel, CSV) using the + button</li>
+                  <li>Ask questions about your documents</li>
+                  <li>Get AI-powered insights and analysis</li>
+                </ul>
+                <p>Let me know if you have any questions!</p>
+              </div>
+            `,
+            timestamp: Date.now()
+          }
+        ]);
         setSelectedFiles([]);
         setActiveFiles([]);
       }
@@ -319,7 +347,7 @@ export default function ChatServicePage() {
                     ...prev,
                     createMessageWithTimestamp(
                         'system',
-                        `Available sheets in "${file.name}": ${uploadedFile.sheetNames.join(', ')}\n\nPlease specify which sheets you want to use by sending a message like:\n"Please use sheets: ${uploadedFile.sheetNames[0]}${uploadedFile.sheetNames[1] ? `, ${uploadedFile.sheetNames[1]}` : ''}"`
+                        `Available sheets in "${file.name}": ${uploadedFile.sheetNames.join(', ')}\n\nPlease specify which sheets you want to use by sending a message like:\n"Please use sheets: Sheet ${uploadedFile.sheetNames[0]}${uploadedFile.sheetNames[1] ? `, Sheet ${uploadedFile.sheetNames[1]}` : ''}, Sheet {Name}"`
                     )
                 ]);
             }
@@ -962,7 +990,7 @@ export default function ChatServicePage() {
 
           <div className="mt-1 text-xs text-gray-600">
             <strong>File Upload Instructions:</strong> Upload one file at a time (max 10) • Send a message about each file • Supported: PDF, Excel, CSV<br/>
-            <strong>For Excel Files:</strong> After upload, specify which sheets to use (comma-separated). Example: "Please use sheets: Sheet1, Sheet2"
+            <strong>For Excel Files:</strong> After upload, specify which sheets to use (comma-separated). Example: "Please use sheets: Sheet Sheet1, Sheet Sheet2, Sheet [Name]"
           </div>
         </div>
       </div>
