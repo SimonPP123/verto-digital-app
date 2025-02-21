@@ -516,11 +516,8 @@ export default function ChatServicePage() {
 
         // Add processing message
         setMessages(prev => [
-            // Keep only system messages about reset and user's new message
-            ...prev.filter(msg => 
-                (msg.role === 'system' && msg.content.includes('Chat has been reset')) ||
-                (msg.role === 'user' && msg.content === userMessage.content)
-            ),
+            // Keep all previous messages
+            ...prev,
             createMessageWithTimestamp(
                 'system',
                 'Processing your request...'
