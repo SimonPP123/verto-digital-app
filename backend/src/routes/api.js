@@ -1482,53 +1482,69 @@ router.post('/chat/callback', express.text({ type: '*/*' }), async (req, res) =>
   }
 });
 
-// Send LinkedIn AI Audience Analysis to n8n webhook
+// Submit a new LinkedIn audience analysis request
 router.post('/linkedin/audience-analysis', isAuthenticated, async (req, res) => {
   try {
     const { websiteUrl, businessPersona, jobFunctions } = req.body;
     
-    // Create a placeholder audience analysis to track the request
-    const placeholderAnalysis = await AudienceAnalysis.create({
+    // Validate input
+    if (!websiteUrl || !businessPersona || !jobFunctions || !Array.isArray(jobFunctions) || jobFunctions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: websiteUrl, businessPersona, or jobFunctions'
+      });
+    }
+
+    // Create a placeholder audience analysis
+    const audienceAnalysis = new AudienceAnalysis({
       user: req.user._id,
       websiteUrl,
       businessPersona,
       jobFunctions,
-      content: 'Processing...',
-      createdAt: new Date()
+      content: 'Processing...'
     });
+
+    // Save the placeholder
+    const savedAnalysis = await audienceAnalysis.save();
 
     logger.info('Created placeholder audience analysis:', {
-      analysisId: placeholderAnalysis._id,
+      analysisId: savedAnalysis._id,
       userId: req.user._id
     });
-    
-    // Send data to n8n webhook
-    await axios.post(process.env.N8N_AI_AUDIENCES, {
-      data: {
-        websiteUrl,
-        businessPersona,
-        jobFunctions,
-        user: {
-          email: req.user.email,
-          id: req.user._id.toString()
-        },
-        analysisId: placeholderAnalysis._id.toString(),
-        callbackUrl: 'https://bolt.vertodigital.com/api/ads/ai-audiences/callback'
-      }
+
+    // Send the request to n8n
+    const n8nUrl = process.env.N8N_AI_AUDIENCES;
+    if (!n8nUrl) {
+      throw new Error('N8N_AI_AUDIENCES environment variable is not set');
+    }
+
+    // Provide both callback URL formats
+    const callbackUrlWithQuery = `${process.env.API_BASE_URL}/api/ads/ai-audiences/callback?analysisId=${savedAnalysis._id}`;
+    const callbackUrlWithPath = `${process.env.API_BASE_URL}/api/ads/ai-audiences/callback/${savedAnalysis._id}`;
+
+    // Send the request to n8n with both callback URLs
+    await axios.post(n8nUrl, {
+      websiteUrl,
+      businessPersona,
+      jobFunctions,
+      callbackUrl: callbackUrlWithPath, // Use the path-based URL as primary
+      callbackUrlWithQuery, // Also provide the query-based URL as a backup
+      analysisId: savedAnalysis._id.toString(), // Include the analysis ID directly in the payload
+      userId: req.user._id.toString()
     });
 
-    // Return immediate confirmation
+    // Return success
     res.json({
       success: true,
-      message: 'Request received and is being processed',
-      status: 'processing',
-      analysisId: placeholderAnalysis._id
+      message: 'Audience analysis request submitted successfully',
+      analysisId: savedAnalysis._id
     });
+
   } catch (error) {
-    logger.error('Error sending audience analysis to n8n:', error);
+    logger.error('Error submitting audience analysis request:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to send audience analysis request',
+      message: 'Failed to submit audience analysis request',
       error: error.message
     });
   }
@@ -1675,36 +1691,75 @@ router.get('/linkedin/audience-analyses/:id', isAuthenticated, async (req, res) 
 router.delete('/linkedin/audience-analyses/:id', isAuthenticated, async (req, res) => {
   try {
     const audienceAnalysis = await AudienceAnalysis.findOneAndDelete({
-      _id: req.params.id,
-      user: req.user._id
-    });
+    _id: req.params.id,
+    user: req.user._id
+  });
 
-    if (!audienceAnalysis) {
-      return res.status(404).json({ error: 'Audience analysis not found' });
-    }
-
-    res.json({ message: 'Audience analysis deleted successfully' });
-  } catch (error) {
-    logger.error('Error deleting audience analysis:', error);
-    res.status(500).json({ error: 'Failed to delete audience analysis' });
+  if (!audienceAnalysis) {
+    return res.status(404).json({ error: 'Audience analysis not found' });
   }
+
+  res.json({ message: 'Audience analysis deleted successfully' });
+} catch (error) {
+  logger.error('Error deleting audience analysis:', error);
+  res.status(500).json({ error: 'Failed to delete audience analysis' });
+}
 });
 
 // Receive processed AI audiences analysis from external service
-router.post('/ads/ai-audiences/callback', express.text({ type: 'text/html' }), async (req, res) => {
+router.post('/ads/ai-audiences/callback', async (req, res) => {
   try {
-    // Get raw body content
-    const rawContent = req.body;
+    let rawContent;
+    let analysisId;
+    
+    // Handle different content types
+    if (req.is('text/html') || req.is('text/plain')) {
+      // For text/html or text/plain content types
+      rawContent = req.body;
+    } else if (req.is('application/json')) {
+      // For JSON content
+      if (typeof req.body === 'string') {
+        try {
+          const parsedBody = JSON.parse(req.body);
+          rawContent = parsedBody.content || parsedBody.html || parsedBody.text || req.body;
+          analysisId = parsedBody.analysisId || req.query.analysisId;
+        } catch (e) {
+          rawContent = req.body;
+        }
+      } else {
+        // Body is already parsed as JSON
+        rawContent = req.body.content || req.body.html || req.body.text || JSON.stringify(req.body);
+        analysisId = req.body.analysisId || req.query.analysisId;
+      }
+    } else {
+      // Default fallback
+      rawContent = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    }
     
     logger.info('Received processed AI audiences analysis from external service:', {
-      contentLength: rawContent.length,
-      contentPreview: rawContent.substring(0, 200) + '...'
+      contentType: req.get('Content-Type'),
+      contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown',
+      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string'
     });
 
-    // Get the analysis ID from the query parameters
-    const analysisId = req.query.analysisId;
+    // Get the analysis ID from various possible sources
+    analysisId = analysisId || req.query.analysisId;
+    
+    // If no analysisId in query params, check if it's in the URL path
+    if (!analysisId && req.path.includes('/callback/')) {
+      const pathParts = req.path.split('/');
+      analysisId = pathParts[pathParts.length - 1];
+    }
+
     if (!analysisId) {
       throw new Error('No analysis ID provided in callback');
+    }
+
+    logger.info('Processing audience analysis callback with ID:', { analysisId });
+
+    // Ensure rawContent is a string
+    if (typeof rawContent !== 'string') {
+      rawContent = JSON.stringify(rawContent);
     }
 
     // Format the content with proper classes
@@ -1750,6 +1805,74 @@ router.post('/ads/ai-audiences/callback', express.text({ type: 'text/html' }), a
     res.status(500).json({
       success: false,
       message: 'Failed to handle audience analysis callback',
+      error: error.message
+    });
+  }
+});
+
+// Alternative route with analysis ID in the URL path
+router.post('/ads/ai-audiences/callback/:analysisId', express.text({ type: 'text/html' }), async (req, res) => {
+  try {
+    // Get raw body content
+    const rawContent = req.body;
+    
+    logger.info('Received processed AI audiences analysis from URL path endpoint:', {
+      contentLength: rawContent.length,
+      contentPreview: rawContent.substring(0, 200) + '...'
+    });
+
+    // Get the analysis ID from the URL parameters
+    const analysisId = req.params.analysisId;
+    
+    if (!analysisId) {
+      throw new Error('No analysis ID provided in callback URL path');
+    }
+
+    logger.info('Processing audience analysis callback with ID from URL path:', { analysisId });
+
+    // Format the content with proper classes
+    const formattedContent = `
+      <div class="prose max-w-none text-gray-900">
+        ${rawContent}
+      </div>
+    `;
+
+    // Find and update the audience analysis
+    const analysis = await AudienceAnalysis.findById(analysisId);
+
+    if (!analysis) {
+      throw new Error(`Audience analysis with ID ${analysisId} not found`);
+    }
+
+    // Update the existing analysis with the new content
+    const updatedAnalysis = await AudienceAnalysis.findByIdAndUpdate(
+      analysisId,
+      { 
+        content: formattedContent,
+        updatedAt: new Date()
+      },
+      { new: true }
+    );
+
+    logger.info('Updated audience analysis from URL path endpoint:', {
+      analysisId: updatedAnalysis._id,
+      userId: updatedAnalysis.user,
+      contentLength: formattedContent.length,
+      contentPreview: formattedContent.substring(0, 200) + '...'
+    });
+
+    // Return success
+    res.json({
+      success: true,
+      message: 'Audience analysis updated successfully via URL path endpoint',
+      analysisId: updatedAnalysis._id
+    });
+
+  } catch (error) {
+    logger.error('Error handling audience analysis callback via URL path:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to handle audience analysis callback via URL path',
       error: error.message
     });
   }
