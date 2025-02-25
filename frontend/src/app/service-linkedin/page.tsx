@@ -66,6 +66,7 @@ export default function LinkedInServicePage() {
             // Parse the content if it's a string
             if (typeof data.content === 'string') {
               try {
+                // Try to parse as JSON
                 const parsedContent = JSON.parse(data.content);
                 setAnalysis(parsedContent);
               } catch (e) {
@@ -77,7 +78,7 @@ export default function LinkedInServicePage() {
                   categories: ''
                 });
               }
-            } else {
+            } else if (typeof data.content === 'object') {
               // If content is already an object, set it directly
               setAnalysis(data.content);
             }
@@ -150,7 +151,7 @@ export default function LinkedInServicePage() {
 
   useEffect(() => {
     if (status === 'completed') {
-      setResult('Audience Analysis: Your LinkedIn AI audience analysis has been successfully generated! You can find it below.');
+      setResult('Audience Analysis: Your LinkedIn AI audience analysis has been successfully generated! You can find it below and in the Google Drive folder.');
       // Trigger refresh of saved analyses
       setRefreshAnalyses(prev => prev + 1);
     }
@@ -183,6 +184,28 @@ export default function LinkedInServicePage() {
         <p className="text-gray-600 mb-6">
           Enter your website URL, business persona, and select job functions to generate a comprehensive LinkedIn audience analysis.
         </p>
+        
+        <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">How the LinkedIn AI Audience Analysis works:</h2>
+          <ol className="list-decimal list-inside space-y-2 text-gray-600">
+            <li>Enter your website URL, business persona, and select relevant job functions</li>
+            <li>Our AI analyzes your website and business information</li>
+            <li>The system generates a comprehensive audience analysis for LinkedIn targeting</li>
+            <li>Results include ICP details, website summary, job title scoring, and relevance categories</li>
+            <li>Your analysis is saved and can be accessed anytime</li>
+          </ol>
+          <div className="mt-6 flex items-center">
+            <span className="text-gray-600 mr-3">Access all audience analyses here:</span>
+            <a 
+              href="https://drive.google.com/drive/u/0/folders/1qLEEcY658Yj1p409NdrG9JACKATpVTin"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Open Google Drive Folder
+            </a>
+          </div>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -267,6 +290,21 @@ export default function LinkedInServicePage() {
               }`}>{line}</p>
             ))}
           </div>
+        </div>
+      )}
+
+      {status === 'completed' && (
+        <div className="mt-8 p-6 bg-white rounded-lg shadow-lg border border-gray-200">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Google Drive with all audience analyses</h2>
+          <p className="text-gray-600 mb-4">Access all your generated audience analyses in the Google Drive folder below:</p>
+          <a 
+            href="https://drive.google.com/drive/u/0/folders/1qLEEcY658Yj1p409NdrG9JACKATpVTin"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Open Google Drive Folder
+          </a>
         </div>
       )}
 
@@ -402,6 +440,70 @@ export default function LinkedInServicePage() {
               .audience-analysis-content .prose table th {
                 background-color: #f9fafb;
                 font-weight: 600;
+              }
+              /* Additional styles for XML-like tags */
+              .audience-analysis-content .prose icp,
+              .audience-analysis-content .prose firmographic,
+              .audience-analysis-content .prose explanation,
+              .audience-analysis-content .prose technographic,
+              .audience-analysis-content .prose behavioral_psychographic,
+              .audience-analysis-content .prose organizational_operational,
+              .audience-analysis-content .prose strategic_alignment,
+              .audience-analysis-content .prose summary,
+              .audience-analysis-content .prose page_analysis,
+              .audience-analysis-content .prose business_summary,
+              .audience-analysis-content .prose job_title_scoring_analysis,
+              .audience-analysis-content .prose scoring_system,
+              .audience-analysis-content .prose analysis,
+              .audience-analysis-content .prose relevance_categories,
+              .audience-analysis-content .prose category1,
+              .audience-analysis-content .prose category2,
+              .audience-analysis-content .prose category3,
+              .audience-analysis-content .prose category4,
+              .audience-analysis-content .prose category5,
+              .audience-analysis-content .prose category6,
+              .audience-analysis-content .prose category7,
+              .audience-analysis-content .prose category8,
+              .audience-analysis-content .prose category9,
+              .audience-analysis-content .prose category10,
+              .audience-analysis-content .prose name,
+              .audience-analysis-content .prose description,
+              .audience-analysis-content .prose high_relevance,
+              .audience-analysis-content .prose low_relevance {
+                display: block;
+                margin: 1rem 0;
+                padding: 0.5rem;
+                border-left: 3px solid #3b82f6;
+                background-color: #f9fafb;
+              }
+              .audience-analysis-content .prose firmographic,
+              .audience-analysis-content .prose technographic,
+              .audience-analysis-content .prose behavioral_psychographic,
+              .audience-analysis-content .prose organizational_operational,
+              .audience-analysis-content .prose strategic_alignment {
+                margin-left: 1rem;
+                border-left-color: #10b981;
+              }
+              .audience-analysis-content .prose explanation {
+                margin-left: 1rem;
+                font-style: italic;
+                color: #6b7280;
+                border-left-color: #f59e0b;
+              }
+              .audience-analysis-content .prose name {
+                font-weight: 600;
+                color: #1e3a8a;
+                border-left-color: #8b5cf6;
+              }
+              .audience-analysis-content .prose high_relevance,
+              .audience-analysis-content .prose low_relevance {
+                margin-left: 1rem;
+              }
+              .audience-analysis-content .prose high_relevance {
+                border-left-color: #10b981;
+              }
+              .audience-analysis-content .prose low_relevance {
+                border-left-color: #ef4444;
               }
             `}</style>
           </div>

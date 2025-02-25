@@ -1568,6 +1568,10 @@ router.post('/linkedin/audience-analysis/callback', async (req, res) => {
           if (parsedBody.content && typeof parsedBody.content === 'object') {
             structuredContent = parsedBody.content;
             rawContent = null; // We'll handle this differently
+          } else if (parsedBody.icp || parsedBody.websiteSummary || parsedBody.scoring || parsedBody.categories) {
+            // Direct structure without content wrapper
+            structuredContent = parsedBody;
+            rawContent = null;
           } else {
             rawContent = parsedBody.content || parsedBody.html || parsedBody.text || req.body;
           }
@@ -1581,6 +1585,10 @@ router.post('/linkedin/audience-analysis/callback', async (req, res) => {
         if (req.body.content && typeof req.body.content === 'object') {
           structuredContent = req.body.content;
           rawContent = null; // We'll handle this differently
+        } else if (req.body.icp || req.body.websiteSummary || req.body.scoring || req.body.categories) {
+          // Direct structure without content wrapper
+          structuredContent = req.body;
+          rawContent = null;
         } else {
           rawContent = req.body.content || req.body.html || req.body.text || JSON.stringify(req.body);
         }
@@ -1620,48 +1628,52 @@ router.post('/linkedin/audience-analysis/callback', async (req, res) => {
     
     // Handle structured content with sections
     if (structuredContent) {
-      formattedContent = `
-        <div class="audience-analysis">
-          <section class="icp-section mb-8">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Ideal Customer Profile</h2>
-            <div class="prose max-w-none text-gray-800">
-              ${structuredContent.icp || ''}
-            </div>
-          </section>
-          
-          <section class="website-summary-section mb-8">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Website Summary</h2>
-            <div class="prose max-w-none text-gray-800">
-              ${structuredContent.websiteSummary || ''}
-            </div>
-          </section>
-          
-          <section class="scoring-section mb-8">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Job Title Scoring</h2>
-            <div class="prose max-w-none text-gray-800">
-              ${structuredContent.scoring || ''}
-            </div>
-          </section>
-          
-          <section class="categories-section mb-8">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Relevance Categories</h2>
-            <div class="prose max-w-none text-gray-800">
-              ${structuredContent.categories || ''}
-            </div>
-          </section>
-        </div>
-      `;
+      // Store the structured content directly in the database
+      // This allows the frontend to access it as an object
+      formattedContent = structuredContent;
+      
+      logger.info('Structured content detected, storing as object:', {
+        hasIcp: !!structuredContent.icp,
+        hasWebsiteSummary: !!structuredContent.websiteSummary,
+        hasScoring: !!structuredContent.scoring,
+        hasCategories: !!structuredContent.categories
+      });
     } else {
       if (typeof rawContent !== 'string') {
         rawContent = JSON.stringify(rawContent);
       }
 
-      // Format the content with proper classes
-      formattedContent = `
-        <div class="prose max-w-none text-gray-900">
-          ${rawContent}
-        </div>
-      `;
+      // Try to parse the raw content as JSON if it looks like JSON
+      if (rawContent.trim().startsWith('{') && rawContent.trim().endsWith('}')) {
+        try {
+          const parsedContent = JSON.parse(rawContent);
+          if (parsedContent.icp || parsedContent.websiteSummary || parsedContent.scoring || parsedContent.categories) {
+            formattedContent = parsedContent;
+            logger.info('Parsed raw content as structured JSON object');
+          } else {
+            // Format the content with proper classes
+            formattedContent = `
+              <div class="prose max-w-none text-gray-900">
+                ${rawContent}
+              </div>
+            `;
+          }
+        } catch (e) {
+          // If parsing fails, treat as HTML
+          formattedContent = `
+            <div class="prose max-w-none text-gray-900">
+              ${rawContent}
+            </div>
+          `;
+        }
+      } else {
+        // Format the content with proper classes
+        formattedContent = `
+          <div class="prose max-w-none text-gray-900">
+            ${rawContent}
+          </div>
+        `;
+      }
     }
 
     // Find and update the audience analysis
@@ -1684,8 +1696,11 @@ router.post('/linkedin/audience-analysis/callback', async (req, res) => {
     logger.info('Updated audience analysis:', {
       analysisId: updatedAnalysis._id,
       userId: updatedAnalysis.user,
-      contentLength: formattedContent.length,
-      contentPreview: formattedContent.substring(0, 200) + '...'
+      contentType: typeof formattedContent,
+      isStructured: typeof formattedContent === 'object',
+      contentPreview: typeof formattedContent === 'string' 
+        ? formattedContent.substring(0, 200) + '...' 
+        : 'structured object'
     });
 
     // Return success
@@ -1728,6 +1743,7 @@ router.get('/linkedin/audience-analysis/status', isAuthenticated, async (req, re
       });
     }
 
+    // Return the content, which could be a string or structured object
     res.json({
       status: 'completed',
       content: latestAnalysis.content
@@ -1822,6 +1838,10 @@ router.post('/ads/ai-audiences/callback', async (req, res) => {
           if (parsedBody.content && typeof parsedBody.content === 'object') {
             structuredContent = parsedBody.content;
             rawContent = null; // We'll handle this differently
+          } else if (parsedBody.icp || parsedBody.websiteSummary || parsedBody.scoring || parsedBody.categories) {
+            // Direct structure without content wrapper
+            structuredContent = parsedBody;
+            rawContent = null;
           } else {
             rawContent = parsedBody.content || parsedBody.html || parsedBody.text || req.body;
           }
@@ -1835,6 +1855,10 @@ router.post('/ads/ai-audiences/callback', async (req, res) => {
         if (req.body.content && typeof req.body.content === 'object') {
           structuredContent = req.body.content;
           rawContent = null; // We'll handle this differently
+        } else if (req.body.icp || req.body.websiteSummary || req.body.scoring || req.body.categories) {
+          // Direct structure without content wrapper
+          structuredContent = req.body;
+          rawContent = null;
         } else {
           rawContent = req.body.content || req.body.html || req.body.text || JSON.stringify(req.body);
         }
@@ -1871,42 +1895,158 @@ router.post('/ads/ai-audiences/callback', async (req, res) => {
     
     // Handle structured content with sections
     if (structuredContent) {
-      formattedContent = `
-        <div class="audience-analysis">
-          <section class="icp-section mb-8">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Ideal Customer Profile</h2>
-            <div class="prose max-w-none text-gray-800">
-              ${structuredContent.icp || ''}
-            </div>
-          </section>
-          
-          <section class="website-summary-section mb-8">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Website Summary</h2>
-            <div class="prose max-w-none text-gray-800">
-              ${structuredContent.websiteSummary || ''}
-            </div>
-          </section>
-          
-          <section class="scoring-section mb-8">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Job Title Scoring</h2>
-            <div class="prose max-w-none text-gray-800">
-              ${structuredContent.scoring || ''}
-            </div>
-          </section>
-          
-          <section class="categories-section mb-8">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Relevance Categories</h2>
-            <div class="prose max-w-none text-gray-800">
-              ${structuredContent.categories || ''}
-            </div>
-          </section>
-        </div>
-      `;
+      formattedContent = structuredContent;
+      
+      logger.info('Structured content detected, storing as object:', {
+        hasIcp: !!structuredContent.icp,
+        hasWebsiteSummary: !!structuredContent.websiteSummary,
+        hasScoring: !!structuredContent.scoring,
+        hasCategories: !!structuredContent.categories
+      });
     } else {
       if (typeof rawContent !== 'string') {
         rawContent = JSON.stringify(rawContent);
       }
 
+      // Try to parse the raw content as JSON if it looks like JSON
+      if (rawContent.trim().startsWith('{') && rawContent.trim().endsWith('}')) {
+        try {
+          const parsedContent = JSON.parse(rawContent);
+          if (parsedContent.icp || parsedContent.websiteSummary || parsedContent.scoring || parsedContent.categories) {
+            formattedContent = parsedContent;
+            logger.info('Parsed raw content as structured JSON object');
+          } else {
+            // Format the content with proper classes
+            formattedContent = `
+              <div class="prose max-w-none text-gray-900">
+                ${rawContent}
+              </div>
+            `;
+          }
+        } catch (e) {
+          // If parsing fails, treat as HTML
+          formattedContent = `
+            <div class="prose max-w-none text-gray-900">
+              ${rawContent}
+            </div>
+          `;
+        }
+      } else {
+        // Format the content with proper classes
+        formattedContent = `
+          <div class="prose max-w-none text-gray-900">
+            ${rawContent}
+          </div>
+        `;
+      }
+    }
+
+    // Find and update the audience analysis
+    const analysis = await AudienceAnalysis.findById(analysisId);
+
+    if (!analysis) {
+      throw new Error(`Audience analysis with ID ${analysisId} not found`);
+    }
+
+    // Update the existing analysis with the new content
+    const updatedAnalysis = await AudienceAnalysis.findByIdAndUpdate(
+      analysisId,
+      { 
+        content: formattedContent,
+        updatedAt: new Date()
+      },
+      { new: true }
+    );
+
+    logger.info('Updated audience analysis:', {
+      analysisId: updatedAnalysis._id,
+      userId: updatedAnalysis.user,
+      contentType: typeof formattedContent,
+      isStructured: typeof formattedContent === 'object',
+      contentPreview: typeof formattedContent === 'string' 
+        ? formattedContent.substring(0, 200) + '...' 
+        : 'structured object'
+    });
+
+    // Return success
+    res.json({
+      success: true,
+      message: 'Audience analysis updated successfully',
+      analysisId: updatedAnalysis._id
+    });
+
+  } catch (error) {
+    logger.error('Error handling audience analysis callback:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to handle audience analysis callback',
+      error: error.message
+    });
+  }
+});
+
+// Alternative route with analysis ID in the URL path
+router.post('/ads/ai-audiences/callback/:analysisId', express.text({ type: ['text/html', 'application/json'] }), async (req, res) => {
+  try {
+    // Get raw body content
+    const rawContent = req.body;
+    
+    logger.info('Received processed AI audiences analysis from URL path endpoint:', {
+      contentType: req.get('Content-Type'),
+      contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown',
+      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string'
+    });
+
+    // Get the analysis ID from the URL parameters
+    const analysisId = req.params.analysisId;
+    
+    if (!analysisId) {
+      throw new Error('No analysis ID provided in callback URL path');
+    }
+
+    logger.info('Processing audience analysis callback with ID from URL path:', { analysisId });
+
+    let formattedContent;
+    
+    // Check if the content is JSON
+    if (req.is('application/json') || (typeof rawContent === 'string' && rawContent.trim().startsWith('{') && rawContent.trim().endsWith('}'))) {
+      try {
+        // Try to parse as JSON if it's a string
+        const parsedContent = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;
+        
+        // Check if it has the expected structure
+        if (parsedContent.icp || parsedContent.websiteSummary || parsedContent.scoring || parsedContent.categories) {
+          // Store the structured content directly
+          formattedContent = parsedContent;
+          
+          logger.info('Structured JSON content detected in URL path endpoint:', {
+            hasIcp: !!parsedContent.icp,
+            hasWebsiteSummary: !!parsedContent.websiteSummary,
+            hasScoring: !!parsedContent.scoring,
+            hasCategories: !!parsedContent.categories
+          });
+        } else if (parsedContent.content && typeof parsedContent.content === 'object') {
+          // Content is wrapped in a content property
+          formattedContent = parsedContent.content;
+          
+          logger.info('Structured JSON content wrapped in content property detected in URL path endpoint');
+        } else {
+          // Not structured, format as HTML
+          formattedContent = `
+            <div class="prose max-w-none text-gray-900">
+              ${JSON.stringify(parsedContent)}
+            </div>
+          `;
+        }
+      } catch (e) {
+        // If parsing fails, treat as HTML
+        formattedContent = `
+          <div class="prose max-w-none text-gray-900">
+            ${rawContent}
+          </div>
+        `;
+      }
+    } else {
       // Format the content with proper classes
       formattedContent = `
         <div class="prose max-w-none text-gray-900">
@@ -1932,79 +2072,14 @@ router.post('/ads/ai-audiences/callback', async (req, res) => {
       { new: true }
     );
 
-    logger.info('Updated audience analysis:', {
-      analysisId: updatedAnalysis._id,
-      userId: updatedAnalysis.user,
-      contentLength: formattedContent.length,
-      contentPreview: formattedContent.substring(0, 200) + '...'
-    });
-
-    // Return success
-    res.json({
-      success: true,
-      message: 'Audience analysis updated successfully',
-      analysisId: updatedAnalysis._id
-    });
-
-  } catch (error) {
-    logger.error('Error handling audience analysis callback:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to handle audience analysis callback',
-      error: error.message
-    });
-  }
-});
-
-// Alternative route with analysis ID in the URL path
-router.post('/ads/ai-audiences/callback/:analysisId', express.text({ type: 'text/html' }), async (req, res) => {
-  try {
-    // Get raw body content
-    const rawContent = req.body;
-    
-    logger.info('Received processed AI audiences analysis from URL path endpoint:', {
-      contentLength: rawContent.length,
-      contentPreview: rawContent.substring(0, 200) + '...'
-    });
-
-    // Get the analysis ID from the URL parameters
-    const analysisId = req.params.analysisId;
-    
-    if (!analysisId) {
-      throw new Error('No analysis ID provided in callback URL path');
-    }
-
-    logger.info('Processing audience analysis callback with ID from URL path:', { analysisId });
-
-    // Format the content with proper classes
-    const formattedContent = `
-      <div class="prose max-w-none text-gray-900">
-        ${rawContent}
-      </div>
-    `;
-
-    // Find and update the audience analysis
-    const analysis = await AudienceAnalysis.findById(analysisId);
-
-    if (!analysis) {
-      throw new Error(`Audience analysis with ID ${analysisId} not found`);
-    }
-
-    // Update the existing analysis with the new content
-    const updatedAnalysis = await AudienceAnalysis.findByIdAndUpdate(
-      analysisId,
-      { 
-        content: formattedContent,
-        updatedAt: new Date()
-      },
-      { new: true }
-    );
-
     logger.info('Updated audience analysis from URL path endpoint:', {
       analysisId: updatedAnalysis._id,
       userId: updatedAnalysis.user,
-      contentLength: formattedContent.length,
-      contentPreview: formattedContent.substring(0, 200) + '...'
+      contentType: typeof formattedContent,
+      isStructured: typeof formattedContent === 'object',
+      contentPreview: typeof formattedContent === 'string' 
+        ? formattedContent.substring(0, 200) + '...' 
+        : 'structured object'
     });
 
     // Return success

@@ -220,6 +220,105 @@ export default function SavedAudienceAnalyses({ onAnalysisCompleted, refreshTrig
                       border-left-color: #8b5cf6;
                       background-color: #f5f3ff;
                     }
+                    .audience-analysis-content .prose {
+                      max-width: none;
+                    }
+                    .audience-analysis-content .prose ul {
+                      list-style-type: disc;
+                      margin-left: 1.5rem;
+                      margin-bottom: 1rem;
+                    }
+                    .audience-analysis-content .prose ol {
+                      list-style-type: decimal;
+                      margin-left: 1.5rem;
+                      margin-bottom: 1rem;
+                    }
+                    .audience-analysis-content .prose p {
+                      margin-bottom: 0.75rem;
+                      line-height: 1.6;
+                    }
+                    .audience-analysis-content .prose strong {
+                      font-weight: 600;
+                      color: #1f2937;
+                    }
+                    .audience-analysis-content .prose h3 {
+                      font-size: 1.25rem;
+                      font-weight: 600;
+                      margin-top: 1.5rem;
+                      margin-bottom: 0.75rem;
+                      color: #374151;
+                    }
+                    .audience-analysis-content .prose h4 {
+                      font-size: 1.125rem;
+                      font-weight: 600;
+                      margin-top: 1.25rem;
+                      margin-bottom: 0.5rem;
+                      color: #4b5563;
+                    }
+                    /* Additional styles for XML-like tags */
+                    .audience-analysis-content .prose icp,
+                    .audience-analysis-content .prose firmographic,
+                    .audience-analysis-content .prose explanation,
+                    .audience-analysis-content .prose technographic,
+                    .audience-analysis-content .prose behavioral_psychographic,
+                    .audience-analysis-content .prose organizational_operational,
+                    .audience-analysis-content .prose strategic_alignment,
+                    .audience-analysis-content .prose summary,
+                    .audience-analysis-content .prose page_analysis,
+                    .audience-analysis-content .prose business_summary,
+                    .audience-analysis-content .prose job_title_scoring_analysis,
+                    .audience-analysis-content .prose scoring_system,
+                    .audience-analysis-content .prose analysis,
+                    .audience-analysis-content .prose relevance_categories,
+                    .audience-analysis-content .prose category1,
+                    .audience-analysis-content .prose category2,
+                    .audience-analysis-content .prose category3,
+                    .audience-analysis-content .prose category4,
+                    .audience-analysis-content .prose category5,
+                    .audience-analysis-content .prose category6,
+                    .audience-analysis-content .prose category7,
+                    .audience-analysis-content .prose category8,
+                    .audience-analysis-content .prose category9,
+                    .audience-analysis-content .prose category10,
+                    .audience-analysis-content .prose name,
+                    .audience-analysis-content .prose description,
+                    .audience-analysis-content .prose high_relevance,
+                    .audience-analysis-content .prose low_relevance {
+                      display: block;
+                      margin: 1rem 0;
+                      padding: 0.5rem;
+                      border-left: 3px solid #3b82f6;
+                      background-color: #f9fafb;
+                    }
+                    .audience-analysis-content .prose firmographic,
+                    .audience-analysis-content .prose technographic,
+                    .audience-analysis-content .prose behavioral_psychographic,
+                    .audience-analysis-content .prose organizational_operational,
+                    .audience-analysis-content .prose strategic_alignment {
+                      margin-left: 1rem;
+                      border-left-color: #10b981;
+                    }
+                    .audience-analysis-content .prose explanation {
+                      margin-left: 1rem;
+                      font-style: italic;
+                      color: #6b7280;
+                      border-left-color: #f59e0b;
+                    }
+                    .audience-analysis-content .prose name {
+                      font-weight: 600;
+                      color: #1e3a8a;
+                      border-left-color: #8b5cf6;
+                    }
+                    .audience-analysis-content .prose high_relevance,
+                    .audience-analysis-content .prose low_relevance {
+                      margin-left: 1rem;
+                    }
+                    .audience-analysis-content .prose high_relevance {
+                      border-left-color: #10b981;
+                    }
+                    .audience-analysis-content .prose low_relevance {
+                      border-left-color: #ef4444;
+                    }
                   `}</style>
                 </div>
               )}
