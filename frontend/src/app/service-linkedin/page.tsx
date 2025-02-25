@@ -5,19 +5,28 @@ import { useAuth } from '../../contexts/AuthContext';
 import SavedAudienceAnalyses from '../../components/SavedAudienceAnalyses';
 import CollapsibleSection from '../../components/CollapsibleSection';
 
+type Analysis = {
+  content: string | {
+    icp?: string;
+    websiteSummary?: string;
+    scoring?: string;
+    categories?: string;
+  };
+  targetUrl: string;
+  createdAt: string;
+};
+
 export default function LinkedInServicePage() {
-  const { isAuthenticated, isLoading } = useAuth();
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const [status, setStatus] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
-  const [analysis, setAnalysis] = useState<{
-    icp: string;
-    websiteSummary: string;
-    scoring: string;
-    categories: string;
-  } | null>(null);
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const [targetUrl, setTargetUrl] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resultMessage, setResultMessage] = useState<string | null>(null);
+  const [analysisStatus, setAnalysisStatus] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
+  const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [refreshAnalyses, setRefreshAnalyses] = useState(0);
   const [selectedJobFunctions, setSelectedJobFunctions] = useState<string[]>([]);
+  const [jobFunctions, setJobFunctions] = useState<string[]>([]);
+  const [isJobFunctionsLoading, setIsJobFunctionsLoading] = useState(false);
 
   // Job functions options
   const jobFunctionsOptions = [
@@ -51,52 +60,53 @@ export default function LinkedInServicePage() {
 
   // Poll for results
   useEffect(() => {
-    let pollInterval: NodeJS.Timeout;
-
-    if (status === 'processing') {
-      pollInterval = setInterval(async () => {
+    if (analysisStatus === 'processing') {
+      const interval = setInterval(async () => {
         try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/linkedin/audience-analysis/status`, {
-            credentials: 'include'
-          });
+          const response = await fetch('/api/linkedin/audience-analysis/status');
           const data = await response.json();
           
-          if (data.status === 'completed' && data.content) {
-            setStatus('completed');
-            // Parse the content if it's a string
+          if (data.status === 'completed') {
+            setAnalysisStatus('completed');
+            
+            // Handle the content based on its type
             if (typeof data.content === 'string') {
               try {
-                // Try to parse as JSON
+                // Try to parse it as JSON if it's a string that looks like JSON
                 const parsedContent = JSON.parse(data.content);
-                setAnalysis(parsedContent);
-              } catch (e) {
-                // If parsing fails, set the content as is
                 setAnalysis({
-                  icp: data.content,
-                  websiteSummary: '',
-                  scoring: '',
-                  categories: ''
+                  content: parsedContent,
+                  targetUrl: '',
+                  createdAt: new Date().toISOString()
+                });
+              } catch (e) {
+                // If parsing fails, set it as a string
+                setAnalysis({
+                  content: data.content,
+                  targetUrl: '',
+                  createdAt: new Date().toISOString()
                 });
               }
-            } else if (typeof data.content === 'object') {
-              // If content is already an object, set it directly
-              setAnalysis(data.content);
+            } else {
+              // It's already an object, set it directly
+              setAnalysis({
+                content: data.content,
+                targetUrl: '',
+                createdAt: new Date().toISOString()
+              });
             }
-            console.log('Audience Analysis Completed:', data.content);
-            clearInterval(pollInterval);
+            
+            setResultMessage("Audience Analysis: Your LinkedIn AI audience analysis has been successfully generated! You can find it below and in the Google Drive folder.");
+            setRefreshAnalyses(prev => prev + 1);
           }
         } catch (error) {
-          console.error('Error polling for results:', error);
+          console.error('Error checking analysis status:', error);
         }
-      }, 5000); // Poll every 5 seconds
+      }, 5000);
+      
+      return () => clearInterval(interval);
     }
-
-    return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
-    };
-  }, [status]);
+  }, [analysisStatus]);
 
   const handleJobFunctionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const options = e.target.options;
@@ -111,53 +121,114 @@ export default function LinkedInServicePage() {
     setSelectedJobFunctions(selectedValues);
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsProcessing(true);
-    setStatus('processing');
+    
+    // Get the form element and extract businessPersona value
+    const form = e.target as HTMLFormElement;
+    const businessPersonaElement = form.elements.namedItem('businessPersona') as HTMLTextAreaElement;
+    const businessPersona = businessPersonaElement?.value;
+    
+    if (!targetUrl) {
+      alert('Please enter a target URL');
+      return;
+    }
+    
+    if (!businessPersona) {
+      alert('Please enter your business persona');
+      return;
+    }
+    
+    if (selectedJobFunctions.length === 0) {
+      alert('Please select at least one job function');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    setAnalysisStatus('processing');
+    setResultMessage(null);
     setAnalysis(null);
     
     try {
-      const formData = new FormData(e.currentTarget);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/linkedin/audience-analysis`, {
+      const response = await fetch('/api/linkedin/audience-analysis', {
         method: 'POST',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          websiteUrl: formData.get('websiteUrl'),
-          businessPersona: formData.get('businessPersona'),
+          websiteUrl: targetUrl,
+          businessPersona,
           jobFunctions: selectedJobFunctions
         }),
       });
-
+      
       const data = await response.json();
-      if (data.success) {
-        setStatus('processing');
-        setResult('Your audience analysis request is being processed. This might take some time...');
+      
+      if (response.ok) {
+        setResultMessage('Your LinkedIn AI audience analysis is being generated. This may take a few minutes.');
       } else {
-        setStatus('error');
-        setResult('Error: ' + data.message);
+        setAnalysisStatus('error');
+        setResultMessage(`Error: ${data.message || 'Failed to submit audience analysis request'}`);
       }
     } catch (error) {
-      console.error('Error:', error);
-      setStatus('error');
-      setResult('An error occurred while processing your request.');
+      console.error('Error submitting audience analysis:', error);
+      setAnalysisStatus('error');
+      setResultMessage('Error: Failed to connect to the server. Please try again later.');
     } finally {
-      setIsProcessing(false);
+      setIsSubmitting(false);
     }
   };
 
-  useEffect(() => {
-    if (status === 'completed') {
-      setResult('Audience Analysis: Your LinkedIn AI audience analysis has been successfully generated! You can find it below and in the Google Drive folder.');
-      // Trigger refresh of saved analyses
-      setRefreshAnalyses(prev => prev + 1);
-    }
-  }, [status]);
+  // Add this function to render structured content
+  const renderStructuredContent = (content: any) => {
+    if (!content) return null;
+    
+    return (
+      <div className="space-y-6">
+        {/* ICP Section */}
+        {content.icp && (
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <h3 className="text-xl font-semibold mb-4 text-blue-700">Ideal Customer Profile (ICP)</h3>
+            <div className="prose max-w-none">
+              <div dangerouslySetInnerHTML={{ __html: content.icp }} />
+            </div>
+          </div>
+        )}
+        
+        {/* Website Summary Section */}
+        {content.websiteSummary && (
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <h3 className="text-xl font-semibold mb-4 text-blue-700">Website Summary</h3>
+            <div className="prose max-w-none">
+              <div dangerouslySetInnerHTML={{ __html: content.websiteSummary }} />
+            </div>
+          </div>
+        )}
+        
+        {/* Scoring Section */}
+        {content.scoring && (
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <h3 className="text-xl font-semibold mb-4 text-blue-700">Audience Scoring</h3>
+            <div className="prose max-w-none">
+              <div dangerouslySetInnerHTML={{ __html: content.scoring }} />
+            </div>
+          </div>
+        )}
+        
+        {/* Categories Section */}
+        {content.categories && (
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <h3 className="text-xl font-semibold mb-4 text-blue-700">Audience Categories</h3>
+            <div className="prose max-w-none">
+              <div dangerouslySetInnerHTML={{ __html: content.categories }} />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
-  if (isLoading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
@@ -220,6 +291,8 @@ export default function LinkedInServicePage() {
             required
             placeholder="https://google.com/"
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900"
+            value={targetUrl}
+            onChange={(e) => setTargetUrl(e.target.value)}
           />
         </div>
 
@@ -261,31 +334,31 @@ export default function LinkedInServicePage() {
 
         <button
           type="submit"
-          disabled={isProcessing}
+          disabled={isSubmitting}
           className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-            isProcessing ? 'opacity-50 cursor-not-allowed' : ''
+            isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
           }`}
         >
-          {isProcessing ? 'Processing...' : 'Generate Audience Analysis'}
+          {isSubmitting ? 'Processing...' : 'Generate Audience Analysis'}
         </button>
       </form>
 
-      {result && (
+      {resultMessage && (
         <div className={`mt-8 p-4 rounded-lg ${
-          status === 'error' ? 'bg-red-50' : 
-          status === 'processing' ? 'bg-yellow-50' : 
+          analysisStatus === 'error' ? 'bg-red-50' : 
+          analysisStatus === 'processing' ? 'bg-yellow-50' : 
           'bg-green-50'
         }`}>
           <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            {status === 'error' ? 'Error' : 
-             status === 'processing' ? 'Processing' : 
+            {analysisStatus === 'error' ? 'Error' : 
+             analysisStatus === 'processing' ? 'Processing' : 
              'Success'}
           </h2>
           <div className="prose max-w-none">
-            {result.split('\n').map((line, index) => (
+            {resultMessage.split('\n').map((line, index) => (
               <p key={index} className={`mb-2 ${
-                status === 'error' ? 'text-red-600' : 
-                status === 'processing' ? 'text-yellow-600' : 
+                analysisStatus === 'error' ? 'text-red-600' : 
+                analysisStatus === 'processing' ? 'text-yellow-600' : 
                 line.startsWith('Audience Analysis:') ? 'text-gray-900 font-semibold' : 'text-green-600'
               }`}>{line}</p>
             ))}
@@ -293,221 +366,22 @@ export default function LinkedInServicePage() {
         </div>
       )}
 
-      {status === 'completed' && (
-        <div className="mt-8 p-6 bg-white rounded-lg shadow-lg border border-gray-200">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Google Drive with all audience analyses</h2>
-          <p className="text-gray-600 mb-4">Access all your generated audience analyses in the Google Drive folder below:</p>
-          <a 
-            href="https://drive.google.com/drive/u/0/folders/1qLEEcY658Yj1p409NdrG9JACKATpVTin"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Open Google Drive Folder
-          </a>
-        </div>
-      )}
-
       {analysis && (
-        <CollapsibleSection title="Generated Audience Analysis" defaultOpen={true}>
-          <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
-            <div className="audience-analysis-content">
-              {typeof analysis === 'string' ? (
-                <div dangerouslySetInnerHTML={{ __html: analysis }} />
-              ) : (
-                <div className="audience-analysis">
-                  {/* ICP Section */}
-                  {analysis.icp && (
-                    <section className="icp-section">
-                      <h2>Ideal Customer Profile (ICP)</h2>
-                      <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: analysis.icp }} />
-                    </section>
-                  )}
-
-                  {/* Website Summary Section */}
-                  {analysis.websiteSummary && (
-                    <section className="website-summary-section">
-                      <h2>Website Analysis</h2>
-                      <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: analysis.websiteSummary }} />
-                    </section>
-                  )}
-
-                  {/* Scoring Section */}
-                  {analysis.scoring && (
-                    <section className="scoring-section">
-                      <h2>Job Title Scoring Analysis</h2>
-                      <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: analysis.scoring }} />
-                    </section>
-                  )}
-
-                  {/* Categories Section */}
-                  {analysis.categories && (
-                    <section className="categories-section">
-                      <h2>Categories Analysis</h2>
-                      <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: analysis.categories }} />
-                    </section>
-                  )}
-                </div>
-              )}
-            </div>
-            <style jsx global>{`
-              .audience-analysis-content .audience-analysis section {
-                margin-bottom: 2rem;
-                border-radius: 0.5rem;
-                overflow: hidden;
-              }
-              .audience-analysis-content .audience-analysis h2 {
-                font-size: 1.5rem;
-                font-weight: 600;
-                margin-bottom: 1rem;
-                color: #1e3a8a;
-                padding: 0.75rem 1rem;
-                background-color: #f0f5ff;
-                border-left: 4px solid #3b82f6;
-              }
-              .audience-analysis-content .icp-section,
-              .audience-analysis-content .website-summary-section,
-              .audience-analysis-content .scoring-section,
-              .audience-analysis-content .categories-section {
-                padding: 1.5rem;
-                border-radius: 0.5rem;
-                background-color: white;
-                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                margin-bottom: 1.5rem;
-                border: 1px solid #e5e7eb;
-              }
-              .audience-analysis-content .icp-section h2 {
-                border-left-color: #3b82f6;
-                background-color: #eff6ff;
-              }
-              .audience-analysis-content .website-summary-section h2 {
-                border-left-color: #10b981;
-                background-color: #ecfdf5;
-              }
-              .audience-analysis-content .scoring-section h2 {
-                border-left-color: #f59e0b;
-                background-color: #fffbeb;
-              }
-              .audience-analysis-content .categories-section h2 {
-                border-left-color: #8b5cf6;
-                background-color: #f5f3ff;
-              }
-              .audience-analysis-content .prose {
-                max-width: none;
-              }
-              .audience-analysis-content .prose ul {
-                list-style-type: disc;
-                margin-left: 1.5rem;
-                margin-bottom: 1rem;
-              }
-              .audience-analysis-content .prose ol {
-                list-style-type: decimal;
-                margin-left: 1.5rem;
-                margin-bottom: 1rem;
-              }
-              .audience-analysis-content .prose p {
-                margin-bottom: 0.75rem;
-                line-height: 1.6;
-              }
-              .audience-analysis-content .prose strong {
-                font-weight: 600;
-                color: #1f2937;
-              }
-              .audience-analysis-content .prose h3 {
-                font-size: 1.25rem;
-                font-weight: 600;
-                margin-top: 1.5rem;
-                margin-bottom: 0.75rem;
-                color: #374151;
-              }
-              .audience-analysis-content .prose h4 {
-                font-size: 1.125rem;
-                font-weight: 600;
-                margin-top: 1.25rem;
-                margin-bottom: 0.5rem;
-                color: #4b5563;
-              }
-              .audience-analysis-content .prose table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 1rem;
-              }
-              .audience-analysis-content .prose table th,
-              .audience-analysis-content .prose table td {
-                padding: 0.5rem 0.75rem;
-                border: 1px solid #e5e7eb;
-              }
-              .audience-analysis-content .prose table th {
-                background-color: #f9fafb;
-                font-weight: 600;
-              }
-              /* Additional styles for XML-like tags */
-              .audience-analysis-content .prose icp,
-              .audience-analysis-content .prose firmographic,
-              .audience-analysis-content .prose explanation,
-              .audience-analysis-content .prose technographic,
-              .audience-analysis-content .prose behavioral_psychographic,
-              .audience-analysis-content .prose organizational_operational,
-              .audience-analysis-content .prose strategic_alignment,
-              .audience-analysis-content .prose summary,
-              .audience-analysis-content .prose page_analysis,
-              .audience-analysis-content .prose business_summary,
-              .audience-analysis-content .prose job_title_scoring_analysis,
-              .audience-analysis-content .prose scoring_system,
-              .audience-analysis-content .prose analysis,
-              .audience-analysis-content .prose relevance_categories,
-              .audience-analysis-content .prose category1,
-              .audience-analysis-content .prose category2,
-              .audience-analysis-content .prose category3,
-              .audience-analysis-content .prose category4,
-              .audience-analysis-content .prose category5,
-              .audience-analysis-content .prose category6,
-              .audience-analysis-content .prose category7,
-              .audience-analysis-content .prose category8,
-              .audience-analysis-content .prose category9,
-              .audience-analysis-content .prose category10,
-              .audience-analysis-content .prose name,
-              .audience-analysis-content .prose description,
-              .audience-analysis-content .prose high_relevance,
-              .audience-analysis-content .prose low_relevance {
-                display: block;
-                margin: 1rem 0;
-                padding: 0.5rem;
-                border-left: 3px solid #3b82f6;
-                background-color: #f9fafb;
-              }
-              .audience-analysis-content .prose firmographic,
-              .audience-analysis-content .prose technographic,
-              .audience-analysis-content .prose behavioral_psychographic,
-              .audience-analysis-content .prose organizational_operational,
-              .audience-analysis-content .prose strategic_alignment {
-                margin-left: 1rem;
-                border-left-color: #10b981;
-              }
-              .audience-analysis-content .prose explanation {
-                margin-left: 1rem;
-                font-style: italic;
-                color: #6b7280;
-                border-left-color: #f59e0b;
-              }
-              .audience-analysis-content .prose name {
-                font-weight: 600;
-                color: #1e3a8a;
-                border-left-color: #8b5cf6;
-              }
-              .audience-analysis-content .prose high_relevance,
-              .audience-analysis-content .prose low_relevance {
-                margin-left: 1rem;
-              }
-              .audience-analysis-content .prose high_relevance {
-                border-left-color: #10b981;
-              }
-              .audience-analysis-content .prose low_relevance {
-                border-left-color: #ef4444;
-              }
-            `}</style>
+        <div className="mt-8">
+          <h2 className="text-2xl font-bold mb-4">Analysis Results</h2>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            {typeof analysis.content === 'object' && analysis.content !== null ? (
+              renderStructuredContent(analysis.content)
+            ) : (
+              <div className="p-6">
+                <div 
+                  className="prose max-w-none"
+                  dangerouslySetInnerHTML={{ __html: analysis.content as string }} 
+                />
+              </div>
+            )}
           </div>
-        </CollapsibleSection>
+        </div>
       )}
 
       <CollapsibleSection title="Saved Audience Analyses" defaultOpen={true}>

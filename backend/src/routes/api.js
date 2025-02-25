@@ -1723,36 +1723,36 @@ router.post('/linkedin/audience-analysis/callback', async (req, res) => {
 // Get audience analysis status
 router.get('/linkedin/audience-analysis/status', isAuthenticated, async (req, res) => {
   try {
-    // Return the latest audience analysis for this user
-    const latestAnalysis = await AudienceAnalysis.findOne({ 
-      user: req.user._id 
-    }).sort({ createdAt: -1 });
+    // Get the latest audience analysis for the user
+    const latestAnalysis = await AudienceAnalysis.findOne({ user: req.user.id })
+      .sort({ createdAt: -1 });
 
     if (!latestAnalysis) {
       return res.json({
         status: 'processing',
-        message: 'No audience analysis found'
+        message: 'No audience analysis found. Please submit a new analysis.'
       });
     }
 
-    // Check if content is still processing
+    // Check if the content is still processing
     if (latestAnalysis.content === 'Processing...') {
       return res.json({
         status: 'processing',
-        message: 'Audience analysis is being generated'
+        message: 'Your audience analysis is being processed. Please check back in a few minutes.'
       });
     }
 
-    // Return the content, which could be a string or structured object
-    res.json({
+    // Return the content (could be a string or a structured object)
+    return res.json({
       status: 'completed',
       content: latestAnalysis.content
     });
+
   } catch (error) {
-    logger.error('Error getting audience analysis status:', error);
-    res.status(500).json({
-      status: 'error',
-      message: 'Failed to get audience analysis status'
+    logger.error('Error fetching audience analysis status:', error, { user: req.user.email });
+    return res.status(500).json({
+      status: 'failed',
+      message: 'Failed to fetch audience analysis status'
     });
   }
 });
@@ -1760,22 +1760,40 @@ router.get('/linkedin/audience-analysis/status', isAuthenticated, async (req, re
 // Get saved audience analyses
 router.get('/linkedin/audience-analyses/saved', isAuthenticated, async (req, res) => {
   try {
-    logger.info('Fetching saved audience analyses for user:', {
-      userId: req.user._id,
-      userEmail: req.user.email
+    logger.info('Fetching saved audience analyses for user:', { user: req.user.email });
+    
+    // Find all audience analyses for this user
+    const savedAnalyses = await AudienceAnalysis.find({ 
+      user: req.user.id,
+      content: { $ne: 'Processing...' } // Only return completed analyses
+    }).sort({ createdAt: -1 });
+    
+    // Map the analyses to include only necessary fields
+    const formattedAnalyses = savedAnalyses.map(analysis => ({
+      id: analysis._id,
+      createdAt: analysis.createdAt,
+      updatedAt: analysis.updatedAt,
+      targetUrl: analysis.targetUrl,
+      content: analysis.content, // This could be a string or a structured object
+      isStructured: typeof analysis.content === 'object' && analysis.content !== null
+    }));
+    
+    logger.info('Successfully fetched saved audience analyses:', { 
+      count: formattedAnalyses.length,
+      user: req.user.email 
     });
-
-    const audienceAnalyses = await AudienceAnalysis.find({ user: req.user._id })
-      .sort({ createdAt: -1 });
-
-    res.json(audienceAnalyses);
+    
+    return res.json({
+      success: true,
+      analyses: formattedAnalyses
+    });
+    
   } catch (error) {
-    logger.error('Error fetching saved audience analyses:', {
-      error: error.message,
-      userId: req.user._id,
-      stack: error.stack
+    logger.error('Error fetching saved audience analyses:', error, { user: req.user.email });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch saved audience analyses'
     });
-    res.status(500).json({ error: 'Failed to fetch saved audience analyses' });
   }
 });
 
@@ -1824,6 +1842,13 @@ router.post('/ads/ai-audiences/callback', async (req, res) => {
     let analysisId;
     let structuredContent = null;
     
+    logger.info('Received callback with content type:', {
+      contentType: req.get('Content-Type'),
+      bodyType: typeof req.body,
+      bodyIsString: typeof req.body === 'string',
+      bodyPreview: typeof req.body === 'object' ? JSON.stringify(req.body).substring(0, 200) : (typeof req.body === 'string' ? req.body.substring(0, 200) : 'unknown')
+    });
+    
     // Handle different content types
     if (req.is('text/html') || req.is('text/plain')) {
       // For text/html or text/plain content types
@@ -1837,45 +1862,68 @@ router.post('/ads/ai-audiences/callback', async (req, res) => {
           // Check if this is our structured format with sections
           if (parsedBody.content && typeof parsedBody.content === 'object') {
             structuredContent = parsedBody.content;
-            rawContent = null; // We'll handle this differently
+            analysisId = parsedBody.analysisId;
+            logger.info('Found structured content in content property', {
+              contentKeys: Object.keys(structuredContent),
+              analysisId
+            });
           } else if (parsedBody.icp || parsedBody.websiteSummary || parsedBody.scoring || parsedBody.categories) {
             // Direct structure without content wrapper
             structuredContent = parsedBody;
-            rawContent = null;
+            logger.info('Found direct structured content', {
+              contentKeys: Object.keys(structuredContent)
+            });
           } else {
             rawContent = parsedBody.content || parsedBody.html || parsedBody.text || req.body;
+            logger.info('Found raw content in parsed body', {
+              contentType: typeof rawContent,
+              contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown'
+            });
           }
           
-          analysisId = parsedBody.analysisId || req.query.analysisId;
+          analysisId = analysisId || parsedBody.analysisId || req.query.analysisId;
         } catch (e) {
+          logger.error('Error parsing JSON body:', e);
           rawContent = req.body;
         }
       } else {
         // Body is already parsed as JSON
+        logger.info('Body is already parsed as JSON', {
+          bodyKeys: Object.keys(req.body)
+        });
+        
         if (req.body.content && typeof req.body.content === 'object') {
           structuredContent = req.body.content;
-          rawContent = null; // We'll handle this differently
+          analysisId = req.body.analysisId;
+          logger.info('Found structured content in content property', {
+            contentKeys: Object.keys(structuredContent),
+            analysisId
+          });
         } else if (req.body.icp || req.body.websiteSummary || req.body.scoring || req.body.categories) {
           // Direct structure without content wrapper
           structuredContent = req.body;
-          rawContent = null;
+          logger.info('Found direct structured content', {
+            contentKeys: Object.keys(structuredContent)
+          });
         } else {
           rawContent = req.body.content || req.body.html || req.body.text || JSON.stringify(req.body);
+          logger.info('Found raw content in body', {
+            contentType: typeof rawContent,
+            contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown'
+          });
         }
-        analysisId = req.body.analysisId || req.query.analysisId;
+        
+        analysisId = analysisId || req.body.analysisId || req.query.analysisId;
       }
     } else {
       // Default fallback
       rawContent = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+      logger.info('Using default fallback for content', {
+        contentType: typeof rawContent,
+        contentLength: rawContent.length
+      });
     }
     
-    logger.info('Received processed AI audiences analysis from external service:', {
-      contentType: req.get('Content-Type'),
-      isStructured: !!structuredContent,
-      contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown',
-      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string'
-    });
-
     // Get the analysis ID from various possible sources
     analysisId = analysisId || req.query.analysisId;
     
@@ -1895,13 +1943,16 @@ router.post('/ads/ai-audiences/callback', async (req, res) => {
     
     // Handle structured content with sections
     if (structuredContent) {
+      // Store the structured content directly without wrapping it in HTML
       formattedContent = structuredContent;
       
       logger.info('Structured content detected, storing as object:', {
         hasIcp: !!structuredContent.icp,
         hasWebsiteSummary: !!structuredContent.websiteSummary,
         hasScoring: !!structuredContent.scoring,
-        hasCategories: !!structuredContent.categories
+        hasCategories: !!structuredContent.categories,
+        contentType: typeof structuredContent,
+        contentKeys: Object.keys(structuredContent)
       });
     } else {
       if (typeof rawContent !== 'string') {
@@ -1912,18 +1963,36 @@ router.post('/ads/ai-audiences/callback', async (req, res) => {
       if (rawContent.trim().startsWith('{') && rawContent.trim().endsWith('}')) {
         try {
           const parsedContent = JSON.parse(rawContent);
-          if (parsedContent.icp || parsedContent.websiteSummary || parsedContent.scoring || parsedContent.categories) {
+          
+          if (parsedContent.content && typeof parsedContent.content === 'object') {
+            // Content is wrapped in a content property
+            formattedContent = parsedContent.content;
+            
+            logger.info('Structured JSON content wrapped in content property detected in URL path endpoint', {
+              contentKeys: Object.keys(formattedContent)
+            });
+          } else if (parsedContent.icp || parsedContent.websiteSummary || parsedContent.scoring || parsedContent.categories) {
+            // Store the structured content directly
             formattedContent = parsedContent;
-            logger.info('Parsed raw content as structured JSON object');
+            
+            logger.info('Structured JSON content detected in URL path endpoint:', {
+              hasIcp: !!parsedContent.icp,
+              hasWebsiteSummary: !!parsedContent.websiteSummary,
+              hasScoring: !!parsedContent.scoring,
+              hasCategories: !!parsedContent.categories,
+              contentKeys: Object.keys(parsedContent)
+            });
           } else {
-            // Format the content with proper classes
+            // Not structured, format as HTML
             formattedContent = `
               <div class="prose max-w-none text-gray-900">
-                ${rawContent}
+                ${JSON.stringify(parsedContent)}
               </div>
             `;
+            logger.info('Non-structured JSON content detected in URL path endpoint, wrapping in HTML');
           }
         } catch (e) {
+          logger.error('Error parsing JSON in URL path endpoint:', e);
           // If parsing fails, treat as HTML
           formattedContent = `
             <div class="prose max-w-none text-gray-900">
@@ -1938,121 +2007,8 @@ router.post('/ads/ai-audiences/callback', async (req, res) => {
             ${rawContent}
           </div>
         `;
+        logger.info('Non-JSON content detected in URL path endpoint, wrapping in HTML');
       }
-    }
-
-    // Find and update the audience analysis
-    const analysis = await AudienceAnalysis.findById(analysisId);
-
-    if (!analysis) {
-      throw new Error(`Audience analysis with ID ${analysisId} not found`);
-    }
-
-    // Update the existing analysis with the new content
-    const updatedAnalysis = await AudienceAnalysis.findByIdAndUpdate(
-      analysisId,
-      { 
-        content: formattedContent,
-        updatedAt: new Date()
-      },
-      { new: true }
-    );
-
-    logger.info('Updated audience analysis:', {
-      analysisId: updatedAnalysis._id,
-      userId: updatedAnalysis.user,
-      contentType: typeof formattedContent,
-      isStructured: typeof formattedContent === 'object',
-      contentPreview: typeof formattedContent === 'string' 
-        ? formattedContent.substring(0, 200) + '...' 
-        : 'structured object'
-    });
-
-    // Return success
-    res.json({
-      success: true,
-      message: 'Audience analysis updated successfully',
-      analysisId: updatedAnalysis._id
-    });
-
-  } catch (error) {
-    logger.error('Error handling audience analysis callback:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to handle audience analysis callback',
-      error: error.message
-    });
-  }
-});
-
-// Alternative route with analysis ID in the URL path
-router.post('/ads/ai-audiences/callback/:analysisId', express.text({ type: ['text/html', 'application/json'] }), async (req, res) => {
-  try {
-    // Get raw body content
-    const rawContent = req.body;
-    
-    logger.info('Received processed AI audiences analysis from URL path endpoint:', {
-      contentType: req.get('Content-Type'),
-      contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown',
-      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string'
-    });
-
-    // Get the analysis ID from the URL parameters
-    const analysisId = req.params.analysisId;
-    
-    if (!analysisId) {
-      throw new Error('No analysis ID provided in callback URL path');
-    }
-
-    logger.info('Processing audience analysis callback with ID from URL path:', { analysisId });
-
-    let formattedContent;
-    
-    // Check if the content is JSON
-    if (req.is('application/json') || (typeof rawContent === 'string' && rawContent.trim().startsWith('{') && rawContent.trim().endsWith('}'))) {
-      try {
-        // Try to parse as JSON if it's a string
-        const parsedContent = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;
-        
-        // Check if it has the expected structure
-        if (parsedContent.icp || parsedContent.websiteSummary || parsedContent.scoring || parsedContent.categories) {
-          // Store the structured content directly
-          formattedContent = parsedContent;
-          
-          logger.info('Structured JSON content detected in URL path endpoint:', {
-            hasIcp: !!parsedContent.icp,
-            hasWebsiteSummary: !!parsedContent.websiteSummary,
-            hasScoring: !!parsedContent.scoring,
-            hasCategories: !!parsedContent.categories
-          });
-        } else if (parsedContent.content && typeof parsedContent.content === 'object') {
-          // Content is wrapped in a content property
-          formattedContent = parsedContent.content;
-          
-          logger.info('Structured JSON content wrapped in content property detected in URL path endpoint');
-        } else {
-          // Not structured, format as HTML
-          formattedContent = `
-            <div class="prose max-w-none text-gray-900">
-              ${JSON.stringify(parsedContent)}
-            </div>
-          `;
-        }
-      } catch (e) {
-        // If parsing fails, treat as HTML
-        formattedContent = `
-          <div class="prose max-w-none text-gray-900">
-            ${rawContent}
-          </div>
-        `;
-      }
-    } else {
-      // Format the content with proper classes
-      formattedContent = `
-        <div class="prose max-w-none text-gray-900">
-          ${rawContent}
-        </div>
-      `;
     }
 
     // Find and update the audience analysis
@@ -2077,9 +2033,11 @@ router.post('/ads/ai-audiences/callback/:analysisId', express.text({ type: ['tex
       userId: updatedAnalysis.user,
       contentType: typeof formattedContent,
       isStructured: typeof formattedContent === 'object',
-      contentPreview: typeof formattedContent === 'string' 
-        ? formattedContent.substring(0, 200) + '...' 
-        : 'structured object'
+      contentPreview: typeof formattedContent === 'object' 
+        ? JSON.stringify(formattedContent).substring(0, 200) + '...' 
+        : (typeof formattedContent === 'string' 
+            ? formattedContent.substring(0, 200) + '...' 
+            : 'unknown type')
     });
 
     // Return success
