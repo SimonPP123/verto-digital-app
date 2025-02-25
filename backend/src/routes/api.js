@@ -14,6 +14,7 @@ const fsPromises = require('fs').promises;
 const FormData = require('form-data');
 const ChatSession = require('../models/ChatSession');
 const XLSX = require('xlsx');
+const AudienceAnalysis = require('../models/AudienceAnalysis');
 
 // Create uploads directory if it doesn't exist
 const uploadDir = path.join(__dirname, '../../uploads');
@@ -687,8 +688,7 @@ router.post('/seo/content-brief/callback', express.text({ type: 'text/html' }), 
     
     logger.info('Received processed SEO content brief from n8n:', {
       contentLength: rawContent.length,
-      contentPreview: rawContent.substring(0, 200) + '...',
-      fullContent: rawContent
+      contentPreview: rawContent.substring(0, 200) + '...'
     });
 
     // Format the content with proper classes
@@ -1477,6 +1477,279 @@ router.post('/chat/callback', express.text({ type: '*/*' }), async (req, res) =>
     res.status(500).json({
       success: false,
       message: 'Failed to process chat response',
+      error: error.message
+    });
+  }
+});
+
+// Send LinkedIn AI Audience Analysis to n8n webhook
+router.post('/linkedin/audience-analysis', isAuthenticated, async (req, res) => {
+  try {
+    const { websiteUrl, businessPersona, jobFunctions } = req.body;
+    
+    // Create a placeholder audience analysis to track the request
+    const placeholderAnalysis = await AudienceAnalysis.create({
+      user: req.user._id,
+      websiteUrl,
+      businessPersona,
+      jobFunctions,
+      content: 'Processing...',
+      createdAt: new Date()
+    });
+
+    logger.info('Created placeholder audience analysis:', {
+      analysisId: placeholderAnalysis._id,
+      userId: req.user._id
+    });
+    
+    // Send data to n8n webhook
+    await axios.post(process.env.N8N_AI_AUDIENCES, {
+      data: {
+        websiteUrl,
+        businessPersona,
+        jobFunctions,
+        user: {
+          email: req.user.email,
+          id: req.user._id.toString()
+        },
+        analysisId: placeholderAnalysis._id.toString(),
+        callbackUrl: 'https://bolt.vertodigital.com/api/ads/ai-audiences/callback'
+      }
+    });
+
+    // Return immediate confirmation
+    res.json({
+      success: true,
+      message: 'Request received and is being processed',
+      status: 'processing',
+      analysisId: placeholderAnalysis._id
+    });
+  } catch (error) {
+    logger.error('Error sending audience analysis to n8n:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send audience analysis request',
+      error: error.message
+    });
+  }
+});
+
+// Receive processed LinkedIn AI Audience Analysis from n8n
+router.post('/linkedin/audience-analysis/callback', express.text({ type: 'text/html' }), async (req, res) => {
+  try {
+    // Get raw body content
+    const rawContent = req.body;
+    
+    logger.info('Received processed LinkedIn AI Audience Analysis from n8n:', {
+      contentLength: rawContent.length,
+      contentPreview: rawContent.substring(0, 200) + '...'
+    });
+
+    // Format the content with proper classes
+    const formattedContent = `
+      <div class="prose max-w-none text-gray-900">
+        ${rawContent}
+      </div>
+    `;
+
+    // Find and update the most recent audience analysis
+    const latestAnalysis = await AudienceAnalysis.findOne()
+      .sort({ createdAt: -1 });
+
+    if (!latestAnalysis) {
+      throw new Error('No recent audience analysis request found');
+    }
+
+    // Update the existing analysis with the new content
+    const updatedAnalysis = await AudienceAnalysis.findByIdAndUpdate(
+      latestAnalysis._id,
+      { 
+        content: formattedContent,
+        updatedAt: new Date()
+      },
+      { new: true }
+    );
+
+    logger.info('Updated audience analysis:', {
+      analysisId: updatedAnalysis._id,
+      userId: updatedAnalysis.user,
+      contentLength: formattedContent.length,
+      contentPreview: formattedContent.substring(0, 200) + '...'
+    });
+
+    // Return success to n8n
+    res.json({
+      success: true,
+      message: 'Audience analysis updated successfully',
+      analysisId: updatedAnalysis._id
+    });
+
+  } catch (error) {
+    logger.error('Error handling n8n callback:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to handle audience analysis callback',
+      error: error.message
+    });
+  }
+});
+
+// Get audience analysis status
+router.get('/linkedin/audience-analysis/status', isAuthenticated, async (req, res) => {
+  try {
+    // Return the latest audience analysis for this user
+    const latestAnalysis = await AudienceAnalysis.findOne({ 
+      user: req.user._id 
+    }).sort({ createdAt: -1 });
+
+    if (!latestAnalysis) {
+      return res.json({
+        status: 'processing',
+        message: 'No audience analysis found'
+      });
+    }
+
+    // Check if content is still processing
+    if (latestAnalysis.content === 'Processing...') {
+      return res.json({
+        status: 'processing',
+        message: 'Audience analysis is being generated'
+      });
+    }
+
+    res.json({
+      status: 'completed',
+      content: latestAnalysis.content
+    });
+  } catch (error) {
+    logger.error('Error getting audience analysis status:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to get audience analysis status'
+    });
+  }
+});
+
+// Get saved audience analyses
+router.get('/linkedin/audience-analyses/saved', isAuthenticated, async (req, res) => {
+  try {
+    logger.info('Fetching saved audience analyses for user:', {
+      userId: req.user._id,
+      userEmail: req.user.email
+    });
+
+    const audienceAnalyses = await AudienceAnalysis.find({ user: req.user._id })
+      .sort({ createdAt: -1 });
+
+    res.json(audienceAnalyses);
+  } catch (error) {
+    logger.error('Error fetching saved audience analyses:', {
+      error: error.message,
+      userId: req.user._id,
+      stack: error.stack
+    });
+    res.status(500).json({ error: 'Failed to fetch saved audience analyses' });
+  }
+});
+
+// Get specific audience analysis
+router.get('/linkedin/audience-analyses/:id', isAuthenticated, async (req, res) => {
+  try {
+    const audienceAnalysis = await AudienceAnalysis.findOne({
+      _id: req.params.id,
+      user: req.user._id
+    });
+
+    if (!audienceAnalysis) {
+      return res.status(404).json({ error: 'Audience analysis not found' });
+    }
+
+    res.json(audienceAnalysis);
+  } catch (error) {
+    logger.error('Error fetching audience analysis:', error);
+    res.status(500).json({ error: 'Failed to fetch audience analysis' });
+  }
+});
+
+// Delete audience analysis
+router.delete('/linkedin/audience-analyses/:id', isAuthenticated, async (req, res) => {
+  try {
+    const audienceAnalysis = await AudienceAnalysis.findOneAndDelete({
+      _id: req.params.id,
+      user: req.user._id
+    });
+
+    if (!audienceAnalysis) {
+      return res.status(404).json({ error: 'Audience analysis not found' });
+    }
+
+    res.json({ message: 'Audience analysis deleted successfully' });
+  } catch (error) {
+    logger.error('Error deleting audience analysis:', error);
+    res.status(500).json({ error: 'Failed to delete audience analysis' });
+  }
+});
+
+// Receive processed AI audiences analysis from external service
+router.post('/ads/ai-audiences/callback', express.text({ type: 'text/html' }), async (req, res) => {
+  try {
+    // Get raw body content
+    const rawContent = req.body;
+    
+    logger.info('Received processed AI audiences analysis from external service:', {
+      contentLength: rawContent.length,
+      contentPreview: rawContent.substring(0, 200) + '...'
+    });
+
+    // Get the analysis ID from the query parameters
+    const analysisId = req.query.analysisId;
+    if (!analysisId) {
+      throw new Error('No analysis ID provided in callback');
+    }
+
+    // Format the content with proper classes
+    const formattedContent = `
+      <div class="prose max-w-none text-gray-900">
+        ${rawContent}
+      </div>
+    `;
+
+    // Find and update the audience analysis
+    const analysis = await AudienceAnalysis.findById(analysisId);
+
+    if (!analysis) {
+      throw new Error(`Audience analysis with ID ${analysisId} not found`);
+    }
+
+    // Update the existing analysis with the new content
+    const updatedAnalysis = await AudienceAnalysis.findByIdAndUpdate(
+      analysisId,
+      { 
+        content: formattedContent,
+        updatedAt: new Date()
+      },
+      { new: true }
+    );
+
+    logger.info('Updated audience analysis:', {
+      analysisId: updatedAnalysis._id,
+      userId: updatedAnalysis.user,
+      contentLength: formattedContent.length,
+      contentPreview: formattedContent.substring(0, 200) + '...'
+    });
+
+    // Return success
+    res.json({
+      success: true,
+      message: 'Audience analysis updated successfully',
+      analysisId: updatedAnalysis._id
+    });
+
+  } catch (error) {
+    logger.error('Error handling audience analysis callback:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to handle audience analysis callback',
       error: error.message
     });
   }
