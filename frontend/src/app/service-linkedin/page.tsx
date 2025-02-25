@@ -10,7 +10,12 @@ export default function LinkedInServicePage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
-  const [analysis, setAnalysis] = useState<any>(null);
+  const [analysis, setAnalysis] = useState<{
+    icp: string;
+    websiteSummary: string;
+    scoring: string;
+    categories: string;
+  } | null>(null);
   const [refreshAnalyses, setRefreshAnalyses] = useState(0);
   const [selectedJobFunctions, setSelectedJobFunctions] = useState<string[]>([]);
 
@@ -58,11 +63,25 @@ export default function LinkedInServicePage() {
           
           if (data.status === 'completed' && data.content) {
             setStatus('completed');
-            setAnalysis(data.content);
-            console.log('Audience Analysis Completed. Content received:', {
-              contentLength: data.content.length,
-              contentPreview: data.content.substring(0, 200) + '...'
-            });
+            // Parse the content if it's a string
+            if (typeof data.content === 'string') {
+              try {
+                const parsedContent = JSON.parse(data.content);
+                setAnalysis(parsedContent);
+              } catch (e) {
+                // If parsing fails, set the content as is
+                setAnalysis({
+                  icp: data.content,
+                  websiteSummary: '',
+                  scoring: '',
+                  categories: ''
+                });
+              }
+            } else {
+              // If content is already an object, set it directly
+              setAnalysis(data.content);
+            }
+            console.log('Audience Analysis Completed:', data.content);
             clearInterval(pollInterval);
           }
         } catch (error) {
@@ -254,9 +273,44 @@ export default function LinkedInServicePage() {
       {analysis && (
         <CollapsibleSection title="Generated Audience Analysis" defaultOpen={true}>
           <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
-            <div 
-              className="audience-analysis-content"
-              dangerouslySetInnerHTML={{ __html: analysis }}>
+            <div className="audience-analysis-content">
+              {typeof analysis === 'string' ? (
+                <div dangerouslySetInnerHTML={{ __html: analysis }} />
+              ) : (
+                <div className="audience-analysis">
+                  {/* ICP Section */}
+                  {analysis.icp && (
+                    <section className="icp-section">
+                      <h2>Ideal Customer Profile (ICP)</h2>
+                      <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: analysis.icp }} />
+                    </section>
+                  )}
+
+                  {/* Website Summary Section */}
+                  {analysis.websiteSummary && (
+                    <section className="website-summary-section">
+                      <h2>Website Analysis</h2>
+                      <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: analysis.websiteSummary }} />
+                    </section>
+                  )}
+
+                  {/* Scoring Section */}
+                  {analysis.scoring && (
+                    <section className="scoring-section">
+                      <h2>Job Title Scoring Analysis</h2>
+                      <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: analysis.scoring }} />
+                    </section>
+                  )}
+
+                  {/* Categories Section */}
+                  {analysis.categories && (
+                    <section className="categories-section">
+                      <h2>Categories Analysis</h2>
+                      <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: analysis.categories }} />
+                    </section>
+                  )}
+                </div>
+              )}
             </div>
             <style jsx global>{`
               .audience-analysis-content .audience-analysis section {
@@ -299,6 +353,9 @@ export default function LinkedInServicePage() {
               .audience-analysis-content .categories-section h2 {
                 border-left-color: #8b5cf6;
                 background-color: #f5f3ff;
+              }
+              .audience-analysis-content .prose {
+                max-width: none;
               }
               .audience-analysis-content .prose ul {
                 list-style-type: disc;

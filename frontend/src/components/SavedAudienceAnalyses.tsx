@@ -8,7 +8,12 @@ interface AudienceAnalysis {
   websiteUrl: string;
   businessPersona: string;
   jobFunctions: string[];
-  content: string;
+  content: {
+    icp: string;
+    websiteSummary: string;
+    scoring: string;
+    categories: string;
+  } | string;
   createdAt: string;
   updatedAt: string;
 }
@@ -134,19 +139,59 @@ export default function SavedAudienceAnalyses({ onAnalysisCompleted, refreshTrig
               
               {selectedAnalysis?._id === analysis._id && (
                 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                  <div 
-                    className="audience-analysis-content"
-                    dangerouslySetInnerHTML={{ __html: analysis.content }}
-                  />
+                  <div className="audience-analysis-content">
+                    {typeof analysis.content === 'string' ? (
+                      <div dangerouslySetInnerHTML={{ __html: analysis.content }} />
+                    ) : (
+                      <div className="audience-analysis">
+                        {/* ICP Section */}
+                        {analysis.content.icp && (
+                          <section className="icp-section">
+                            <h2>Ideal Customer Profile (ICP)</h2>
+                            <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: analysis.content.icp }} />
+                          </section>
+                        )}
+
+                        {/* Website Summary Section */}
+                        {analysis.content.websiteSummary && (
+                          <section className="website-summary-section">
+                            <h2>Website Analysis</h2>
+                            <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: analysis.content.websiteSummary }} />
+                          </section>
+                        )}
+
+                        {/* Scoring Section */}
+                        {analysis.content.scoring && (
+                          <section className="scoring-section">
+                            <h2>Job Title Scoring Analysis</h2>
+                            <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: analysis.content.scoring }} />
+                          </section>
+                        )}
+
+                        {/* Categories Section */}
+                        {analysis.content.categories && (
+                          <section className="categories-section">
+                            <h2>Categories Analysis</h2>
+                            <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: analysis.content.categories }} />
+                          </section>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <style jsx global>{`
                     .audience-analysis-content .audience-analysis section {
                       margin-bottom: 2rem;
+                      border-radius: 0.5rem;
+                      overflow: hidden;
                     }
                     .audience-analysis-content .audience-analysis h2 {
                       font-size: 1.5rem;
                       font-weight: 600;
                       margin-bottom: 1rem;
                       color: #1e3a8a;
+                      padding: 0.75rem 1rem;
+                      background-color: #f0f5ff;
+                      border-left: 4px solid #3b82f6;
                     }
                     .audience-analysis-content .icp-section,
                     .audience-analysis-content .website-summary-section,
@@ -160,46 +205,20 @@ export default function SavedAudienceAnalyses({ onAnalysisCompleted, refreshTrig
                       border: 1px solid #e5e7eb;
                     }
                     .audience-analysis-content .icp-section h2 {
-                      border-left: 4px solid #3b82f6;
-                      padding-left: 0.75rem;
+                      border-left-color: #3b82f6;
                       background-color: #eff6ff;
-                      padding: 0.75rem 1rem;
                     }
                     .audience-analysis-content .website-summary-section h2 {
-                      border-left: 4px solid #10b981;
-                      padding-left: 0.75rem;
+                      border-left-color: #10b981;
                       background-color: #ecfdf5;
-                      padding: 0.75rem 1rem;
                     }
                     .audience-analysis-content .scoring-section h2 {
-                      border-left: 4px solid #f59e0b;
-                      padding-left: 0.75rem;
+                      border-left-color: #f59e0b;
                       background-color: #fffbeb;
-                      padding: 0.75rem 1rem;
                     }
                     .audience-analysis-content .categories-section h2 {
-                      border-left: 4px solid #8b5cf6;
-                      padding-left: 0.75rem;
+                      border-left-color: #8b5cf6;
                       background-color: #f5f3ff;
-                      padding: 0.75rem 1rem;
-                    }
-                    .audience-analysis-content .prose ul {
-                      list-style-type: disc;
-                      margin-left: 1.5rem;
-                      margin-bottom: 1rem;
-                    }
-                    .audience-analysis-content .prose ol {
-                      list-style-type: decimal;
-                      margin-left: 1.5rem;
-                      margin-bottom: 1rem;
-                    }
-                    .audience-analysis-content .prose p {
-                      margin-bottom: 0.75rem;
-                      line-height: 1.6;
-                    }
-                    .audience-analysis-content .prose strong {
-                      font-weight: 600;
-                      color: #1f2937;
                     }
                   `}</style>
                 </div>
