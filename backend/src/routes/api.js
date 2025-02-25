@@ -1719,7 +1719,7 @@ router.get('/linkedin/audience-analyses/saved', isAuthenticated, async (req, res
       id: analysis._id,
       createdAt: analysis.createdAt,
       updatedAt: analysis.updatedAt,
-      targetUrl: analysis.targetUrl,
+      targetUrl: analysis.websiteUrl, // Use websiteUrl from the model
       content: analysis.content, // This could be a string or a structured object
       isStructured: typeof analysis.content === 'object' && analysis.content !== null
     }));
@@ -1762,23 +1762,71 @@ router.get('/linkedin/audience-analyses/:id', isAuthenticated, async (req, res) 
   }
 });
 
-// Delete audience analysis
+// Delete an audience analysis
 router.delete('/linkedin/audience-analyses/:id', isAuthenticated, async (req, res) => {
   try {
-    const audienceAnalysis = await AudienceAnalysis.findOneAndDelete({
-    _id: req.params.id,
-    user: req.user._id
-  });
-
-  if (!audienceAnalysis) {
-    return res.status(404).json({ error: 'Audience analysis not found' });
+    const analysisId = req.params.id;
+    
+    // Log the deletion attempt
+    logger.info('Attempting to delete audience analysis:', { 
+      analysisId, 
+      user: req.user.email 
+    });
+    
+    // Validate the ID
+    if (!analysisId) {
+      logger.warn('Invalid analysis ID provided for deletion:', { 
+        analysisId, 
+        user: req.user.email 
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid analysis ID'
+      });
+    }
+    
+    // Check if the analysis exists and belongs to the user
+    const analysis = await AudienceAnalysis.findOne({
+      _id: analysisId,
+      user: req.user.id
+    });
+    
+    if (!analysis) {
+      logger.warn('Analysis not found or does not belong to user:', { 
+        analysisId, 
+        user: req.user.email 
+      });
+      return res.status(404).json({
+        success: false,
+        message: 'Analysis not found'
+      });
+    }
+    
+    // Delete the analysis
+    await AudienceAnalysis.deleteOne({ _id: analysisId });
+    
+    // Log the successful deletion
+    logger.info('Successfully deleted audience analysis:', { 
+      analysisId, 
+      user: req.user.email 
+    });
+    
+    return res.json({
+      success: true,
+      message: 'Analysis deleted successfully',
+      id: analysisId
+    });
+    
+  } catch (error) {
+    logger.error('Error deleting audience analysis:', error, { 
+      analysisId: req.params.id, 
+      user: req.user.email 
+    });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete analysis'
+    });
   }
-
-  res.json({ message: 'Audience analysis deleted successfully' });
-} catch (error) {
-  logger.error('Error deleting audience analysis:', error);
-  res.status(500).json({ error: 'Failed to delete audience analysis' });
-}
 });
 
 // Receive processed AI audiences analysis from external service
