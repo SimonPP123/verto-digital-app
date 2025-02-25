@@ -253,8 +253,100 @@ export default function LinkedInServicePage() {
 
       {analysis && (
         <CollapsibleSection title="Generated Audience Analysis" defaultOpen={true}>
-          <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6"
-               dangerouslySetInnerHTML={{ __html: analysis }}>
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
+            <div 
+              className="audience-analysis-content"
+              dangerouslySetInnerHTML={{ __html: analysis }}>
+            </div>
+            <style jsx global>{`
+              .audience-analysis-content .audience-analysis section {
+                margin-bottom: 2rem;
+                border-radius: 0.5rem;
+                overflow: hidden;
+              }
+              .audience-analysis-content .audience-analysis h2 {
+                font-size: 1.5rem;
+                font-weight: 600;
+                margin-bottom: 1rem;
+                color: #1e3a8a;
+                padding: 0.75rem 1rem;
+                background-color: #f0f5ff;
+                border-left: 4px solid #3b82f6;
+              }
+              .audience-analysis-content .icp-section,
+              .audience-analysis-content .website-summary-section,
+              .audience-analysis-content .scoring-section,
+              .audience-analysis-content .categories-section {
+                padding: 1.5rem;
+                border-radius: 0.5rem;
+                background-color: white;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                margin-bottom: 1.5rem;
+                border: 1px solid #e5e7eb;
+              }
+              .audience-analysis-content .icp-section h2 {
+                border-left-color: #3b82f6;
+                background-color: #eff6ff;
+              }
+              .audience-analysis-content .website-summary-section h2 {
+                border-left-color: #10b981;
+                background-color: #ecfdf5;
+              }
+              .audience-analysis-content .scoring-section h2 {
+                border-left-color: #f59e0b;
+                background-color: #fffbeb;
+              }
+              .audience-analysis-content .categories-section h2 {
+                border-left-color: #8b5cf6;
+                background-color: #f5f3ff;
+              }
+              .audience-analysis-content .prose ul {
+                list-style-type: disc;
+                margin-left: 1.5rem;
+                margin-bottom: 1rem;
+              }
+              .audience-analysis-content .prose ol {
+                list-style-type: decimal;
+                margin-left: 1.5rem;
+                margin-bottom: 1rem;
+              }
+              .audience-analysis-content .prose p {
+                margin-bottom: 0.75rem;
+                line-height: 1.6;
+              }
+              .audience-analysis-content .prose strong {
+                font-weight: 600;
+                color: #1f2937;
+              }
+              .audience-analysis-content .prose h3 {
+                font-size: 1.25rem;
+                font-weight: 600;
+                margin-top: 1.5rem;
+                margin-bottom: 0.75rem;
+                color: #374151;
+              }
+              .audience-analysis-content .prose h4 {
+                font-size: 1.125rem;
+                font-weight: 600;
+                margin-top: 1.25rem;
+                margin-bottom: 0.5rem;
+                color: #4b5563;
+              }
+              .audience-analysis-content .prose table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 1rem;
+              }
+              .audience-analysis-content .prose table th,
+              .audience-analysis-content .prose table td {
+                padding: 0.5rem 0.75rem;
+                border: 1px solid #e5e7eb;
+              }
+              .audience-analysis-content .prose table th {
+                background-color: #f9fafb;
+                font-weight: 600;
+              }
+            `}</style>
           </div>
         </CollapsibleSection>
       )}

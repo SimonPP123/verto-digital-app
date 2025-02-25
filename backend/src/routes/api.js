@@ -1551,34 +1551,129 @@ router.post('/linkedin/audience-analysis', isAuthenticated, async (req, res) => 
 });
 
 // Receive processed LinkedIn AI Audience Analysis from n8n
-router.post('/linkedin/audience-analysis/callback', express.text({ type: 'text/html' }), async (req, res) => {
+router.post('/linkedin/audience-analysis/callback', async (req, res) => {
   try {
-    // Get raw body content
-    const rawContent = req.body;
+    let rawContent;
+    let analysisId;
+    let structuredContent = null;
+    
+    // Handle different content types
+    if (req.is('application/json')) {
+      // For JSON content
+      if (typeof req.body === 'string') {
+        try {
+          const parsedBody = JSON.parse(req.body);
+          
+          // Check if this is our structured format with sections
+          if (parsedBody.content && typeof parsedBody.content === 'object') {
+            structuredContent = parsedBody.content;
+            rawContent = null; // We'll handle this differently
+          } else {
+            rawContent = parsedBody.content || parsedBody.html || parsedBody.text || req.body;
+          }
+          
+          analysisId = parsedBody.analysisId || req.query.analysisId;
+        } catch (e) {
+          rawContent = req.body;
+        }
+      } else {
+        // Body is already parsed as JSON
+        if (req.body.content && typeof req.body.content === 'object') {
+          structuredContent = req.body.content;
+          rawContent = null; // We'll handle this differently
+        } else {
+          rawContent = req.body.content || req.body.html || req.body.text || JSON.stringify(req.body);
+        }
+        analysisId = req.body.analysisId || req.query.analysisId;
+      }
+    } else if (req.is('text/html') || req.is('text/plain')) {
+      // For text/html or text/plain content types
+      rawContent = req.body;
+    } else {
+      // Default fallback
+      rawContent = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    }
     
     logger.info('Received processed LinkedIn AI Audience Analysis from n8n:', {
-      contentLength: rawContent.length,
-      contentPreview: rawContent.substring(0, 200) + '...'
+      contentType: req.get('Content-Type'),
+      isStructured: !!structuredContent,
+      contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown',
+      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string'
     });
 
-    // Format the content with proper classes
-    const formattedContent = `
-      <div class="prose max-w-none text-gray-900">
-        ${rawContent}
-      </div>
-    `;
+    // Get the analysis ID from various possible sources
+    analysisId = analysisId || req.query.analysisId;
+    
+    // If no analysisId in query params, check if it's in the URL path
+    if (!analysisId && req.path.includes('/callback/')) {
+      const pathParts = req.path.split('/');
+      analysisId = pathParts[pathParts.length - 1];
+    }
 
-    // Find and update the most recent audience analysis
-    const latestAnalysis = await AudienceAnalysis.findOne()
-      .sort({ createdAt: -1 });
+    if (!analysisId) {
+      throw new Error('No analysis ID provided in callback');
+    }
 
-    if (!latestAnalysis) {
-      throw new Error('No recent audience analysis request found');
+    logger.info('Processing audience analysis callback with ID:', { analysisId });
+
+    let formattedContent;
+    
+    // Handle structured content with sections
+    if (structuredContent) {
+      formattedContent = `
+        <div class="audience-analysis">
+          <section class="icp-section mb-8">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Ideal Customer Profile</h2>
+            <div class="prose max-w-none text-gray-800">
+              ${structuredContent.icp || ''}
+            </div>
+          </section>
+          
+          <section class="website-summary-section mb-8">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Website Summary</h2>
+            <div class="prose max-w-none text-gray-800">
+              ${structuredContent.websiteSummary || ''}
+            </div>
+          </section>
+          
+          <section class="scoring-section mb-8">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Job Title Scoring</h2>
+            <div class="prose max-w-none text-gray-800">
+              ${structuredContent.scoring || ''}
+            </div>
+          </section>
+          
+          <section class="categories-section mb-8">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Relevance Categories</h2>
+            <div class="prose max-w-none text-gray-800">
+              ${structuredContent.categories || ''}
+            </div>
+          </section>
+        </div>
+      `;
+    } else {
+      if (typeof rawContent !== 'string') {
+        rawContent = JSON.stringify(rawContent);
+      }
+
+      // Format the content with proper classes
+      formattedContent = `
+        <div class="prose max-w-none text-gray-900">
+          ${rawContent}
+        </div>
+      `;
+    }
+
+    // Find and update the audience analysis
+    const analysis = await AudienceAnalysis.findById(analysisId);
+
+    if (!analysis) {
+      throw new Error(`Audience analysis with ID ${analysisId} not found`);
     }
 
     // Update the existing analysis with the new content
     const updatedAnalysis = await AudienceAnalysis.findByIdAndUpdate(
-      latestAnalysis._id,
+      analysisId,
       { 
         content: formattedContent,
         updatedAt: new Date()
@@ -1593,7 +1688,7 @@ router.post('/linkedin/audience-analysis/callback', express.text({ type: 'text/h
       contentPreview: formattedContent.substring(0, 200) + '...'
     });
 
-    // Return success to n8n
+    // Return success
     res.json({
       success: true,
       message: 'Audience analysis updated successfully',
@@ -1601,7 +1696,7 @@ router.post('/linkedin/audience-analysis/callback', express.text({ type: 'text/h
     });
 
   } catch (error) {
-    logger.error('Error handling n8n callback:', error);
+    logger.error('Error handling audience analysis callback:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to handle audience analysis callback',
@@ -1711,6 +1806,7 @@ router.post('/ads/ai-audiences/callback', async (req, res) => {
   try {
     let rawContent;
     let analysisId;
+    let structuredContent = null;
     
     // Handle different content types
     if (req.is('text/html') || req.is('text/plain')) {
@@ -1721,14 +1817,27 @@ router.post('/ads/ai-audiences/callback', async (req, res) => {
       if (typeof req.body === 'string') {
         try {
           const parsedBody = JSON.parse(req.body);
-          rawContent = parsedBody.content || parsedBody.html || parsedBody.text || req.body;
+          
+          // Check if this is our structured format with sections
+          if (parsedBody.content && typeof parsedBody.content === 'object') {
+            structuredContent = parsedBody.content;
+            rawContent = null; // We'll handle this differently
+          } else {
+            rawContent = parsedBody.content || parsedBody.html || parsedBody.text || req.body;
+          }
+          
           analysisId = parsedBody.analysisId || req.query.analysisId;
         } catch (e) {
           rawContent = req.body;
         }
       } else {
         // Body is already parsed as JSON
-        rawContent = req.body.content || req.body.html || req.body.text || JSON.stringify(req.body);
+        if (req.body.content && typeof req.body.content === 'object') {
+          structuredContent = req.body.content;
+          rawContent = null; // We'll handle this differently
+        } else {
+          rawContent = req.body.content || req.body.html || req.body.text || JSON.stringify(req.body);
+        }
         analysisId = req.body.analysisId || req.query.analysisId;
       }
     } else {
@@ -1738,6 +1847,7 @@ router.post('/ads/ai-audiences/callback', async (req, res) => {
     
     logger.info('Received processed AI audiences analysis from external service:', {
       contentType: req.get('Content-Type'),
+      isStructured: !!structuredContent,
       contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown',
       contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string'
     });
@@ -1757,17 +1867,53 @@ router.post('/ads/ai-audiences/callback', async (req, res) => {
 
     logger.info('Processing audience analysis callback with ID:', { analysisId });
 
-    // Ensure rawContent is a string
-    if (typeof rawContent !== 'string') {
-      rawContent = JSON.stringify(rawContent);
-    }
+    let formattedContent;
+    
+    // Handle structured content with sections
+    if (structuredContent) {
+      formattedContent = `
+        <div class="audience-analysis">
+          <section class="icp-section mb-8">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Ideal Customer Profile</h2>
+            <div class="prose max-w-none text-gray-800">
+              ${structuredContent.icp || ''}
+            </div>
+          </section>
+          
+          <section class="website-summary-section mb-8">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Website Summary</h2>
+            <div class="prose max-w-none text-gray-800">
+              ${structuredContent.websiteSummary || ''}
+            </div>
+          </section>
+          
+          <section class="scoring-section mb-8">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Job Title Scoring</h2>
+            <div class="prose max-w-none text-gray-800">
+              ${structuredContent.scoring || ''}
+            </div>
+          </section>
+          
+          <section class="categories-section mb-8">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Relevance Categories</h2>
+            <div class="prose max-w-none text-gray-800">
+              ${structuredContent.categories || ''}
+            </div>
+          </section>
+        </div>
+      `;
+    } else {
+      if (typeof rawContent !== 'string') {
+        rawContent = JSON.stringify(rawContent);
+      }
 
-    // Format the content with proper classes
-    const formattedContent = `
-      <div class="prose max-w-none text-gray-900">
-        ${rawContent}
-      </div>
-    `;
+      // Format the content with proper classes
+      formattedContent = `
+        <div class="prose max-w-none text-gray-900">
+          ${rawContent}
+        </div>
+      `;
+    }
 
     // Find and update the audience analysis
     const analysis = await AudienceAnalysis.findById(analysisId);

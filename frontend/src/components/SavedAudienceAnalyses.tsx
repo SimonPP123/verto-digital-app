@@ -133,10 +133,76 @@ export default function SavedAudienceAnalyses({ onAnalysisCompleted, refreshTrig
               </div>
               
               {selectedAnalysis?._id === analysis._id && (
-                <div 
-                  className="mt-4 p-4 bg-gray-50 rounded-lg"
-                  dangerouslySetInnerHTML={{ __html: analysis.content }}
-                />
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                  <div 
+                    className="audience-analysis-content"
+                    dangerouslySetInnerHTML={{ __html: analysis.content }}
+                  />
+                  <style jsx global>{`
+                    .audience-analysis-content .audience-analysis section {
+                      margin-bottom: 2rem;
+                    }
+                    .audience-analysis-content .audience-analysis h2 {
+                      font-size: 1.5rem;
+                      font-weight: 600;
+                      margin-bottom: 1rem;
+                      color: #1e3a8a;
+                    }
+                    .audience-analysis-content .icp-section,
+                    .audience-analysis-content .website-summary-section,
+                    .audience-analysis-content .scoring-section,
+                    .audience-analysis-content .categories-section {
+                      padding: 1.5rem;
+                      border-radius: 0.5rem;
+                      background-color: white;
+                      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                      margin-bottom: 1.5rem;
+                      border: 1px solid #e5e7eb;
+                    }
+                    .audience-analysis-content .icp-section h2 {
+                      border-left: 4px solid #3b82f6;
+                      padding-left: 0.75rem;
+                      background-color: #eff6ff;
+                      padding: 0.75rem 1rem;
+                    }
+                    .audience-analysis-content .website-summary-section h2 {
+                      border-left: 4px solid #10b981;
+                      padding-left: 0.75rem;
+                      background-color: #ecfdf5;
+                      padding: 0.75rem 1rem;
+                    }
+                    .audience-analysis-content .scoring-section h2 {
+                      border-left: 4px solid #f59e0b;
+                      padding-left: 0.75rem;
+                      background-color: #fffbeb;
+                      padding: 0.75rem 1rem;
+                    }
+                    .audience-analysis-content .categories-section h2 {
+                      border-left: 4px solid #8b5cf6;
+                      padding-left: 0.75rem;
+                      background-color: #f5f3ff;
+                      padding: 0.75rem 1rem;
+                    }
+                    .audience-analysis-content .prose ul {
+                      list-style-type: disc;
+                      margin-left: 1.5rem;
+                      margin-bottom: 1rem;
+                    }
+                    .audience-analysis-content .prose ol {
+                      list-style-type: decimal;
+                      margin-left: 1.5rem;
+                      margin-bottom: 1rem;
+                    }
+                    .audience-analysis-content .prose p {
+                      margin-bottom: 0.75rem;
+                      line-height: 1.6;
+                    }
+                    .audience-analysis-content .prose strong {
+                      font-weight: 600;
+                      color: #1f2937;
+                    }
+                  `}</style>
+                </div>
               )}
             </div>
           ))}
