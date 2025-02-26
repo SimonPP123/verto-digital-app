@@ -22,21 +22,11 @@ type Analysis = {
 const renderStructuredContent = (content: any) => {
   if (!content) return <div>No content available</div>;
 
-  // Helper function to process HTML content safely
+  // Helper function to process HTML content safely (minimal processing)
   const processHtmlContent = (html: string) => {
     if (!html) return "";
     // Basic sanitization (remove script tags)
-    let sanitized = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-    
-    // Special handling for scoring_system content to ensure proper formatting
-    // Adding a wrapper class if needed for specific styling
-    if (html.includes('<scoring_system>') || html.includes('scoring_system')) {
-      sanitized = sanitized.replace(/<scoring_system>/gi, '<div class="scoring_system">');
-      sanitized = sanitized.replace(/<\/scoring_system>/gi, '</div>');
-    }
-    
-    // Ensure all content is visible and properly formatted
-    return sanitized;
+    return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
   };
 
   // Helper function to download analysis as text file
@@ -59,31 +49,33 @@ const renderStructuredContent = (content: any) => {
     URL.revokeObjectURL(url);
   };
 
-  // Format keys for display (convert camelCase or snake_case to Title Case)
-  const formatKey = (key: string) => {
-    return key
-      .replace(/_/g, ' ')
-      .replace(/([A-Z])/g, ' $1')
-      .replace(/^./, str => str.toUpperCase())
-      .trim();
+  // Extract content based on HTML structure if it's a string
+  const extractSection = (htmlContent: string, tagName: string) => {
+    if (!htmlContent.includes(`<${tagName}>`)) return null;
+    const regex = new RegExp(`<${tagName}>(.*?)<\/${tagName}>`, 's');
+    const match = htmlContent.match(regex);
+    return match ? match[1] : null;
   };
 
-  // Determine if content is relevance category related
-  const isRelevanceCategory = (key: string) => {
-    return key.includes('relevance') || 
-           key.includes('category') || 
-           ['high_relevance', 'medium_relevance', 'low_relevance'].includes(key);
-  };
+  // Handle content whether it's an object or string
+  let icpContent = null;
+  let websiteSummaryContent = null;
+  let scoringContent = null;
+  let categoriesContent = null;
 
-  // Determine color class based on section type
-  const getSectionColorClass = (key: string) => {
-    if (key === 'icp') return 'text-indigo-900';
-    if (key === 'websiteSummary' || key.includes('summary')) return 'text-emerald-800';
-    if (key.includes('scoring') || key.includes('score')) return 'text-amber-800';
-    if (key.includes('categor')) return 'text-purple-800';
-    if (isRelevanceCategory(key)) return 'text-violet-800';
-    return 'text-gray-800';
-  };
+  if (typeof content === 'string') {
+    // Parse sections from HTML string
+    icpContent = extractSection(content, 'icp');
+    websiteSummaryContent = extractSection(content, 'business_summary');
+    scoringContent = extractSection(content, 'scoring_system');
+    categoriesContent = extractSection(content, 'relevance_categories');
+  } else {
+    // Handle object format
+    icpContent = content.icp || null;
+    websiteSummaryContent = content.websiteSummary || content.business_summary || null;
+    scoringContent = content.scoring || content.scoring_system || null;
+    categoriesContent = content.categories || content.relevance_categories || null;
+  }
 
   return (
     <div className="space-y-6">
@@ -98,210 +90,56 @@ const renderStructuredContent = (content: any) => {
       </div>
       
       {/* ICP Section */}
-      {content.icp && (
-        <div className="mb-8">
+      {icpContent && (
+        <div className="mb-8 border-l-4 border-indigo-500 pl-4">
           <h3 className="text-xl font-bold text-indigo-900 mb-4">Ideal Customer Profile (ICP)</h3>
           <div 
             className="prose max-w-none" 
             dangerouslySetInnerHTML={{ 
-              __html: processHtmlContent(content.icp) 
+              __html: processHtmlContent(icpContent) 
             }} 
           />
         </div>
       )}
 
       {/* Website Summary Section */}
-      {content.websiteSummary && (
-        <div className="mb-8">
+      {websiteSummaryContent && (
+        <div className="mb-8 border-l-4 border-emerald-500 pl-4">
           <h3 className="text-xl font-bold text-emerald-800 mb-4">Website Summary</h3>
           <div 
             className="prose max-w-none" 
             dangerouslySetInnerHTML={{ 
-              __html: processHtmlContent(content.websiteSummary) 
+              __html: processHtmlContent(websiteSummaryContent) 
             }} 
           />
         </div>
       )}
 
-      {/* Scoring Section */}
-      {content.scoring && (
-        <div className="mb-8">
-          <h3 className="text-xl font-bold text-amber-800 mb-4">Audience Scoring</h3>
+      {/* Scoring System Section */}
+      {scoringContent && (
+        <div className="mb-8 border-l-4 border-amber-500 pl-4">
+          <h3 className="text-xl font-bold text-amber-800 mb-4">Scoring</h3>
           <div 
             className="prose max-w-none" 
             dangerouslySetInnerHTML={{ 
-              __html: processHtmlContent(content.scoring) 
-            }} 
-          />
-        </div>
-      )}
-
-      {/* Job Title Scoring Analysis */}
-      {content.job_title_scoring_analysis && (
-        <div className="mb-8">
-          <h3 className="text-xl font-bold text-amber-800 mb-4">Job Title Scoring Analysis</h3>
-          <div 
-            className="prose max-w-none" 
-            dangerouslySetInnerHTML={{ 
-              __html: processHtmlContent(content.job_title_scoring_analysis) 
-            }} 
-          />
-        </div>
-      )}
-
-      {/* Relevance Categories Section */}
-      {content.relevance_categories && (
-        <div className="mb-8">
-          <h3 className="text-xl font-bold text-violet-800 mb-4">Relevance Categories</h3>
-          <div 
-            className="prose max-w-none" 
-            dangerouslySetInnerHTML={{ 
-              __html: processHtmlContent(content.relevance_categories) 
+              __html: processHtmlContent(scoringContent) 
             }} 
           />
         </div>
       )}
 
       {/* Categories Section */}
-      {content.categories && (
-        <div className="mb-8">
-          <h3 className="text-xl font-bold text-purple-800 mb-4">Audience Categories</h3>
+      {categoriesContent && (
+        <div className="mb-8 border-l-4 border-purple-500 pl-4">
+          <h3 className="text-xl font-bold text-purple-800 mb-4">Categories</h3>
           <div 
             className="prose max-w-none" 
             dangerouslySetInnerHTML={{ 
-              __html: processHtmlContent(content.categories) 
+              __html: processHtmlContent(categoriesContent) 
             }} 
           />
         </div>
       )}
-
-      {/* Summary Section (if it exists separately) */}
-      {content.summary && (
-        <div className="mb-8">
-          <h3 className="text-xl font-bold text-blue-800 mb-4">Summary</h3>
-          <div 
-            className="prose max-w-none" 
-            dangerouslySetInnerHTML={{ 
-              __html: processHtmlContent(content.summary) 
-            }} 
-          />
-        </div>
-      )}
-
-      {/* Scoring System Section - Handle specifically */}
-      {content.scoring_system && (
-        <div className="mb-8">
-          <h3 className="text-xl font-bold text-amber-800 mb-4">Scoring System</h3>
-          <div 
-            className="prose max-w-none" 
-            dangerouslySetInnerHTML={{ 
-              __html: processHtmlContent(content.scoring_system) 
-            }} 
-          />
-        </div>
-      )}
-
-      {/* Relevance Levels Sections */}
-      {(content.high_relevance || content.medium_relevance || content.low_relevance) && (
-        <div className="mb-8">
-          <h3 className="text-xl font-bold text-violet-800 mb-4">Audience Relevance Levels</h3>
-          
-          {content.high_relevance && (
-            <div className="mb-6 bg-green-50 border-l-4 border-green-500 p-4 rounded-md">
-              <h4 className="text-lg font-semibold text-green-800 mb-2">High Relevance</h4>
-              <div 
-                className="prose max-w-none" 
-                dangerouslySetInnerHTML={{ 
-                  __html: processHtmlContent(content.high_relevance) 
-                }} 
-              />
-            </div>
-          )}
-          
-          {content.medium_relevance && (
-            <div className="mb-6 bg-amber-50 border-l-4 border-amber-500 p-4 rounded-md">
-              <h4 className="text-lg font-semibold text-amber-800 mb-2">Medium Relevance</h4>
-              <div 
-                className="prose max-w-none" 
-                dangerouslySetInnerHTML={{ 
-                  __html: processHtmlContent(content.medium_relevance) 
-                }} 
-              />
-            </div>
-          )}
-          
-          {content.low_relevance && (
-            <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
-              <h4 className="text-lg font-semibold text-red-800 mb-2">Low Relevance</h4>
-              <div 
-                className="prose max-w-none" 
-                dangerouslySetInnerHTML={{ 
-                  __html: processHtmlContent(content.low_relevance) 
-                }} 
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Category Sections (numbered categories) */}
-      {(() => {
-        const categoryKeys = Object.keys(content).filter(key => /^category\d+$/.test(key));
-        if (categoryKeys.length === 0) return null;
-        
-        return (
-          <div className="mb-8">
-            <h3 className="text-xl font-bold text-purple-800 mb-4">Specific Audience Categories</h3>
-            {categoryKeys.sort().map((key) => (
-              <div key={key} className="audience-category mb-6">
-                <h4 className="text-lg font-semibold text-purple-800 mb-2">
-                  {formatKey(key)}
-                </h4>
-                <div 
-                  className="prose max-w-none" 
-                  dangerouslySetInnerHTML={{ 
-                    __html: processHtmlContent(content[key]) 
-                  }} 
-                />
-              </div>
-            ))}
-          </div>
-        );
-      })()}
-
-      {/* Handle any additional sections not specifically defined */}
-      {Object.entries(content).map(([key, value]) => {
-        // Skip sections we've already rendered
-        if ([
-          'icp', 
-          'websiteSummary', 
-          'scoring', 
-          'categories', 
-          'summary', 
-          'job_title_scoring_analysis',
-          'relevance_categories',
-          'high_relevance', 
-          'medium_relevance', 
-          'low_relevance',
-          'scoring_system'
-        ].includes(key) || /^category\d+$/.test(key)) {
-          return null;
-        }
-        
-        return (
-          <div key={key} className="mb-8">
-            <h3 className={`text-xl font-bold ${getSectionColorClass(key)} mb-4`}>
-              {formatKey(key)}
-            </h3>
-            <div
-              className="prose max-w-none"
-              dangerouslySetInnerHTML={{
-                __html: typeof value === 'string' ? processHtmlContent(value as string) : JSON.stringify(value, null, 2)
-              }}
-            />
-          </div>
-        );
-      })}
     </div>
   );
 };
