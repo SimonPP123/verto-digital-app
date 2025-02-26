@@ -53,14 +53,14 @@ function CollapsibleSection({ title, children }: CollapsibleSectionProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="border rounded-lg mb-4">
+    <div className="border border-gray-200 rounded-lg mb-6 shadow-sm hover:shadow-md transition-shadow duration-200">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-2 text-left bg-gray-50 hover:bg-gray-100 rounded-t-lg flex justify-between items-center"
+        className="w-full px-5 py-3 text-left bg-gradient-to-r from-blue-50 to-white rounded-t-lg flex justify-between items-center"
       >
         <span className="text-lg font-semibold text-gray-900">{title}</span>
         <svg
-          className={`w-5 h-5 transform transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-5 h-5 transform transition-transform duration-200 text-blue-600 ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -69,7 +69,7 @@ function CollapsibleSection({ title, children }: CollapsibleSectionProps) {
         </svg>
       </button>
       {isOpen && (
-        <div className="p-4 border-t">
+        <div className="p-5 border-t border-gray-200 bg-white rounded-b-lg">
           {children}
         </div>
       )}
@@ -491,18 +491,21 @@ const AdCopyServicePage: React.FC = () => {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-50 to-white">
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+          <p className="text-blue-800 font-medium">Loading...</p>
+        </div>
       </div>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
-          <p className="text-gray-600">Please log in to access this service.</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-50 to-white">
+        <div className="text-center bg-white p-8 rounded-xl shadow-lg border border-blue-100">
+          <h1 className="text-2xl font-bold text-blue-900 mb-4">Access Denied</h1>
+          <p className="text-blue-700">Please log in to access this service.</p>
         </div>
       </div>
     );
@@ -510,14 +513,14 @@ const AdCopyServicePage: React.FC = () => {
 
   return (
     <React.Fragment>
-      <div className="flex flex-col lg:flex-row min-h-screen w-full">
+      <div className="flex flex-col lg:flex-row min-h-screen w-full bg-gray-50">
         {/* Left Sidebar - Saved Ad Copies */}
-        <div className="w-full lg:w-1/5 min-w-[250px] max-w-full lg:max-w-[400px] border-b lg:border-b-0 lg:border-r bg-gray-50">
-          <div className="p-4 border-b bg-white">
-            <h2 className="text-lg font-semibold text-gray-900 mb-3">Saved Ad Copies</h2>
+        <div className="w-full lg:w-1/5 min-w-[250px] max-w-full lg:max-w-[400px] border-b lg:border-b-0 lg:border-r bg-white shadow-sm">
+          <div className="p-5 border-b bg-gradient-to-r from-blue-50 to-white">
+            <h2 className="text-lg font-semibold text-blue-900 mb-3">Saved Ad Copies</h2>
             <button
               onClick={clearForm}
-              className="w-full py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              className="w-full py-2.5 px-4 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors shadow-sm hover:shadow-md transition-all duration-200"
             >
               Generate New Copies
             </button>
@@ -528,13 +531,16 @@ const AdCopyServicePage: React.FC = () => {
         </div>
 
         {/* Main content */}
-        <div className="flex-1 w-full min-w-0 py-6 lg:py-8 px-4 lg:px-8">
-          <div className="max-w-full mx-auto">
-            <div className="text-center">
-              <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-6 lg:mb-8">
+        <div className="flex-1 w-full min-w-0 py-6 lg:py-8 px-4 lg:px-8 overflow-y-auto">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-8">
+              <h1 className="text-2xl lg:text-3xl font-bold text-blue-900 mb-6 lg:mb-8">
                 AI Ad Copy Generator
               </h1>
-              <div className="mb-8 aspect-video w-full max-w-4xl mx-auto rounded-lg overflow-hidden shadow-lg">
+              <p className="text-blue-800 mb-6 max-w-3xl mx-auto">
+                Generate high-converting ad copy for multiple platforms with AI. Simply fill in the details about your campaign, and our AI will create tailored ad copy variations.
+              </p>
+              <div className="mb-8 aspect-video w-full max-w-4xl mx-auto rounded-lg overflow-hidden shadow-lg border border-gray-200">
                 <iframe
                   src="https://www.loom.com/embed/0d51a2a58f7a43218924f154e3f84e60?sid=954da684-b64c-4ed4-a065-36e5ef818a5a"
                   frameBorder="0"
@@ -545,10 +551,117 @@ const AdCopyServicePage: React.FC = () => {
             </div>
             
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-700">{error}</p>
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg shadow-sm">
+                <div className="flex items-center">
+                  <svg className="h-5 w-5 text-red-600 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  <p className="text-red-700 font-medium">{error}</p>
+                </div>
               </div>
             )}
+            
+            {/* Templates Section */}
+            <div className="mb-8 bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-blue-900">Templates</h2>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => setShowTemplateForm(!showTemplateForm)}
+                    className="py-2 px-3 bg-blue-100 text-blue-700 text-sm font-medium rounded-md hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                  >
+                    {showTemplateForm ? 'Cancel' : 'Save as Template'}
+                  </button>
+                  <button
+                    onClick={loadTemplates}
+                    className="py-2 px-3 bg-gray-100 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+                  >
+                    Refresh
+                  </button>
+                </div>
+              </div>
+              
+              {showTemplateForm && (
+                <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex flex-col md:flex-row md:items-end gap-3">
+                    <div className="flex-grow">
+                      <label htmlFor="template_name" className="block text-sm font-medium text-blue-800 mb-1">
+                        Template Name
+                      </label>
+                      <input
+                        type="text"
+                        id="template_name"
+                        value={templateName}
+                        onChange={(e) => setTemplateName(e.target.value)}
+                        placeholder="Enter template name"
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900"
+                      />
+                    </div>
+                    <button
+                      onClick={saveAsTemplate}
+                      className="py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                    >
+                      Save Template
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {templatesError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-700 text-sm">{templatesError}</p>
+                </div>
+              )}
+              
+              {isLoadingTemplates ? (
+                <div className="flex justify-center items-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                </div>
+              ) : templates.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {templates.map((template) => (
+                    <div
+                      key={template._id}
+                      className="border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow cursor-pointer bg-white"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-medium text-blue-900 truncate" title={template.name}>
+                          {template.name}
+                        </h3>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Are you sure you want to delete the template "${template.name}"?`)) {
+                              deleteTemplate(template._id);
+                            }
+                          }}
+                          className="text-red-600 hover:text-red-800 p-1"
+                          title="Delete template"
+                        >
+                          <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-5z" />
+                            <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
+                          </svg>
+                        </button>
+                      </div>
+                      <p className="text-sm text-gray-600 truncate" title={template.campaignName}>
+                        {template.campaignName}
+                      </p>
+                      <button
+                        onClick={() => applyTemplate(template)}
+                        className="mt-2 w-full py-1.5 px-3 bg-blue-50 text-blue-700 text-sm font-medium rounded hover:bg-blue-100 focus:outline-none transition-colors"
+                      >
+                        Apply Template
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-gray-600">
+                  No templates found. Save your form as a template to reuse it later.
+                </div>
+              )}
+            </div>
             
             <form onSubmit={(e) => {
               e.preventDefault();
@@ -563,31 +676,58 @@ const AdCopyServicePage: React.FC = () => {
               }
               setFormError(null);
               handleSubmit(e);
-            }} className="space-y-6 max-w-full">
+            }} className="space-y-6 max-w-full bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+              <h2 className="text-xl font-semibold text-blue-900 pb-4 border-b border-gray-200">Campaign Information</h2>
+              
               {formError && (
                 <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-red-700">{formError}</p>
+                  <div className="flex items-center">
+                    <svg className="h-5 w-5 text-red-600 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <p className="text-red-700">{formError}</p>
+                  </div>
                 </div>
               )}
               
-              <div>
-                <label htmlFor="campaign_name" className="block text-sm font-medium text-gray-800">
-                  Campaign Name <span className="text-red-600">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="campaign_name"
-                  id="campaign_name"
-                  value={campaignName}
-                  onChange={(e) => setCampaignName(e.target.value)}
-                  placeholder="Enter your campaign name"
-                  required
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label htmlFor="campaign_name" className="block text-sm font-medium text-gray-800 mb-1">
+                    Campaign Name <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="campaign_name"
+                    id="campaign_name"
+                    value={campaignName}
+                    onChange={(e) => setCampaignName(e.target.value)}
+                    placeholder="Enter your campaign name"
+                    required
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Give your campaign a descriptive name</p>
+                </div>
+                
+                <div>
+                  <label htmlFor="landing_page_url" className="block text-sm font-medium text-gray-800 mb-1">
+                    Landing Page URL <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    name="landing_page_url"
+                    id="landing_page_url"
+                    value={landingPageUrl}
+                    onChange={(e) => setLandingPageUrl(e.target.value)}
+                    placeholder="Enter your landing page URL"
+                    required
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">URL where users will be directed after clicking the ad</p>
+                </div>
               </div>
 
               <div>
-                <label htmlFor="landing_page_content" className="block text-sm font-medium text-gray-800">
+                <label htmlFor="landing_page_content" className="block text-sm font-medium text-gray-800 mb-1">
                   Landing Page Content <span className="text-red-600">*</span>
                 </label>
                 <textarea
@@ -598,123 +738,134 @@ const AdCopyServicePage: React.FC = () => {
                   placeholder="Paste the landing page content here"
                   rows={4}
                   required
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
                 />
+                <p className="mt-1 text-xs text-gray-500">Copy and paste the main content from your landing page</p>
               </div>
 
-              <div>
-                <label htmlFor="content_material" className="block text-sm font-medium text-gray-800">
-                  Asset (ebook, whitepaper, etc.)
-                </label>
-                <textarea
-                  name="content_material"
-                  id="content_material"
-                  placeholder="Paste the asset text here"
-                  rows={4}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
-                />
+              <div className="border-t border-gray-200 pt-6 mt-6">
+                <h3 className="text-lg font-medium text-blue-900 mb-4">Additional Information</h3>
+                
+                <div className="space-y-6">
+                  <div>
+                    <label htmlFor="content_material" className="block text-sm font-medium text-gray-800 mb-1">
+                      Asset (ebook, whitepaper, etc.)
+                    </label>
+                    <textarea
+                      name="content_material"
+                      id="content_material"
+                      placeholder="Paste the asset text here"
+                      rows={4}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Include content from your downloadable assets if applicable</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label htmlFor="keywords" className="block text-sm font-medium text-gray-800 mb-1">
+                        Keywords
+                      </label>
+                      <textarea
+                        name="keywords"
+                        id="keywords"
+                        placeholder="Enter keywords - one per line or separated by commas"
+                        rows={3}
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">Keywords relevant to your campaign</p>
+                    </div>
+
+                    <div>
+                      <label htmlFor="internal_knowledge" className="block text-sm font-medium text-gray-800 mb-1">
+                        ICP, Website Summary and Brand Guidance
+                      </label>
+                      <textarea
+                        name="internal_knowledge"
+                        id="internal_knowledge"
+                        placeholder="Paste the information about ICP, Website Summary and Brand Guidance here"
+                        rows={3}
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">Information about your ideal customer profile and brand</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label htmlFor="additional_information" className="block text-sm font-medium text-gray-800 mb-1">
+                        Additional Information
+                      </label>
+                      <textarea
+                        name="additional_information"
+                        id="additional_information"
+                        value={additionalInfo}
+                        onChange={(e) => setAdditionalInfo(e.target.value)}
+                        placeholder="Enter any additional information about your campaign"
+                        rows={3}
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">Any other details that might help generate better ad copy</p>
+                    </div>
+
+                    <div>
+                      <label htmlFor="asset_link" className="block text-sm font-medium text-gray-800 mb-1">
+                        Asset Link
+                      </label>
+                      <input
+                        type="url"
+                        name="asset_link"
+                        id="asset_link"
+                        placeholder="Enter the URL of any relevant assets"
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">URL to your downloadable asset (if applicable)</p>
+                      
+                      <div className="mt-4">
+                        <label htmlFor="tone_and_language" className="block text-sm font-medium text-gray-800 mb-1">
+                          Tone and Language
+                        </label>
+                        <select
+                          name="tone_and_language"
+                          id="tone_and_language"
+                          value={toneOfVoice}
+                          onChange={(e) => setToneOfVoice(e.target.value)}
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900"
+                        >
+                          <option value="" className="text-gray-500">Select tone</option>
+                          <option value="professional" className="text-gray-900">Professional</option>
+                          <option value="friendly" className="text-gray-900">Friendly</option>
+                          <option value="casual" className="text-gray-900">Casual</option>
+                          <option value="humorous" className="text-gray-900">Humorous</option>
+                          <option value="formal" className="text-gray-900">Formal</option>
+                          <option value="persuasive" className="text-gray-900">Persuasive</option>
+                        </select>
+                        <p className="mt-1 text-xs text-gray-500">Select the tone of voice for your ad copy</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label htmlFor="keywords" className="block text-sm font-medium text-gray-800">
-                  Keywords
-                </label>
-                <textarea
-                  name="keywords"
-                  id="keywords"
-                  placeholder="Enter keywords - one per line or separated by commas"
-                  rows={3}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="internal_knowledge" className="block text-sm font-medium text-gray-800">
-                  ICP, Website Summary and Brand Guidance
-                </label>
-                <textarea
-                  name="internal_knowledge"
-                  id="internal_knowledge"
-                  placeholder="Paste the information about ICP, Website Summary and Brand Guidance here"
-                  rows={3}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="additional_information" className="block text-sm font-medium text-gray-800">
-                  Additional Information
-                </label>
-                <textarea
-                  name="additional_information"
-                  id="additional_information"
-                  value={additionalInfo}
-                  onChange={(e) => setAdditionalInfo(e.target.value)}
-                  placeholder="Enter any additional information about your campaign"
-                  rows={3}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="asset_link" className="block text-sm font-medium text-gray-800">
-                  Asset Link
-                </label>
-                <input
-                  type="url"
-                  name="asset_link"
-                  id="asset_link"
-                  placeholder="Enter the URL of any relevant assets"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="landing_page_url" className="block text-sm font-medium text-gray-800">
-                  Landing Page URL <span className="text-red-600">*</span>
-                </label>
-                <input
-                  type="url"
-                  name="landing_page_url"
-                  id="landing_page_url"
-                  value={landingPageUrl}
-                  onChange={(e) => setLandingPageUrl(e.target.value)}
-                  placeholder="Enter your landing page URL"
-                  required
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="tone_and_language" className="block text-sm font-medium text-gray-800">
-                  Tone and Language
-                </label>
-                <select
-                  name="tone_and_language"
-                  id="tone_and_language"
-                  value={toneOfVoice}
-                  onChange={(e) => setToneOfVoice(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
+              <div className="pt-6 border-t border-gray-200">
+                <button
+                  type="submit"
+                  disabled={isProcessing}
+                  className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 ${
+                    isProcessing ? 'opacity-70 cursor-not-allowed' : 'transform hover:scale-[1.02]'
+                  }`}
                 >
-                  <option value="" className="text-gray-900">Select tone</option>
-                  <option value="professional" className="text-gray-900">Professional</option>
-                  <option value="friendly" className="text-gray-900">Friendly</option>
-                  <option value="casual" className="text-gray-900">Casual</option>
-                  <option value="humorous" className="text-gray-900">Humorous</option>
-                  <option value="formal" className="text-gray-900">Formal</option>
-                  <option value="persuasive" className="text-gray-900">Persuasive</option>
-                </select>
+                  {isProcessing ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Generating Ad Copy...
+                    </>
+                  ) : 'Generate Ad Copy'}
+                </button>
               </div>
-
-              <button
-                type="submit"
-                disabled={isProcessing}
-                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-                  isProcessing ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                {isProcessing ? 'Generating...' : 'Generate Ad Copy'}
-              </button>
             </form>
 
             <div className="mt-6 flex items-center justify-center">
@@ -723,16 +874,20 @@ const AdCopyServicePage: React.FC = () => {
                 href="https://drive.google.com/drive/folders/1DvIbLMzlbfwR2lXkEmqfHO8XkfzBu2Ct"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-all duration-200"
               >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                  <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
+                </svg>
                 Open Google Drive Folder
               </a>
             </div>
 
             {result && (
               <div className="mt-8 space-y-6 overflow-x-auto max-w-full">
-                <div className="bg-white rounded-lg shadow p-4 lg:p-6">
-                  <h2 className="text-xl font-semibold text-gray-900 mb-4">Generated Ad Copies</h2>
+                <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
+                  <h2 className="text-xl font-semibold text-blue-900 mb-6 pb-3 border-b border-gray-200">Generated Ad Copies</h2>
                   
                   {Object.entries(result).map(([key, value]) => {
                     // Skip if value is null or empty
@@ -1280,92 +1435,7 @@ const AdCopyServicePage: React.FC = () => {
             )}
           </div>
         </div>
-
-        {/* Right Sidebar - Templates */}
-        <div className="w-full lg:w-1/5 min-w-[250px] max-w-full lg:max-w-[400px] border-t lg:border-t-0 lg:border-l bg-gray-50">
-          <div className="p-4 border-b bg-white">
-            <h2 className="text-lg font-semibold text-gray-900 mb-3">Templates</h2>
-            <button
-              onClick={() => setShowTemplateForm(true)}
-              className="w-full py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-            >
-              Save as Template
-            </button>
-          </div>
-          <div className="h-[calc(100vh-5rem)] overflow-y-auto">
-            {/* Templates List */}
-            <div className="p-4">
-              {isLoadingTemplates ? (
-                <div className="flex justify-center items-center py-4">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500" />
-                </div>
-              ) : templatesError ? (
-                <div className="text-red-600 text-sm p-4 bg-red-50 rounded-md">
-                  {templatesError}
-                </div>
-              ) : templates.length === 0 ? (
-                <p className="text-gray-500 text-sm text-center py-4">No saved templates</p>
-              ) : (
-                <div className="space-y-4">
-                  {templates.map((template) => (
-                    <div 
-                      key={template._id} 
-                      className="bg-white rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
-                    >
-                      <h3 className="font-medium text-gray-900 mb-2">{template.name || 'Untitled Template'}</h3>
-                      <p className="text-sm text-gray-600 mb-2">{template.campaignName}</p>
-                      <div className="flex justify-between items-center">
-                        <button
-                          onClick={() => applyTemplate(template)}
-                          className="text-sm text-blue-600 hover:text-blue-800"
-                        >
-                          Apply Template
-                        </button>
-                        <button
-                          onClick={() => template._id ? deleteTemplate(template._id) : null}
-                          className="text-sm text-red-600 hover:text-red-800"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
-
-      {/* Template Form Modal */}
-      {showTemplateForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-auto">
-            <h3 className="text-lg font-semibold text-black mb-4">Save as Template</h3>
-            <input
-              type="text"
-              value={templateName}
-              onChange={(e) => setTemplateName(e.target.value)}
-              placeholder="Enter template name"
-              className="w-full mb-4 px-3 py-2 border rounded-md text-black placeholder-gray-500 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-            />
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowTemplateForm(false)}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveAsTemplate}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </React.Fragment>
   );
 };

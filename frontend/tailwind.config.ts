@@ -1,6 +1,6 @@
 import type { Config } from "tailwindcss";
 
-export default {
+const config: Config = {
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,10 +9,24 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        verto: {
+          blue: {
+            primary: 'var(--verto-blue-primary)',
+            light: 'var(--verto-blue-light)',
+            dark: 'var(--verto-blue-dark)',
+          },
+          gray: {
+            light: 'var(--verto-gray-light)',
+            DEFAULT: 'var(--verto-gray)',
+            dark: 'var(--verto-gray-dark)',
+          },
+          success: 'var(--verto-success)',
+          warning: 'var(--verto-warning)',
+          error: 'var(--verto-error)',
+        },
       },
     },
   },
   plugins: [],
-} satisfies Config;
+};
+export default config;

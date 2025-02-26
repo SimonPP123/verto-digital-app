@@ -5,6 +5,16 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* VertoDigital brand colors */
+  --verto-blue-primary: #0066cc;
+  --verto-blue-light: #4d94ff;
+  --verto-blue-dark: #004d99;
+  --verto-gray-light: #f5f7fa;
+  --verto-gray: #eaeef3;
+  --verto-gray-dark: #475569;
+  --verto-success: #10b981;
+  --verto-warning: #f59e0b;
+  --verto-error: #ef4444;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -18,4 +28,28 @@ body {
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-gray-50;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold text-gray-900;
+  }
+}
+
+@layer components {
+  .verto-gradient {
+    @apply bg-gradient-to-r from-blue-600 to-blue-700;
+  }
+  
+  .verto-btn-primary {
+    @apply px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm transition-colors;
+  }
+  
+  .verto-card {
+    @apply bg-white rounded-lg shadow-md border border-gray-200 p-6;
+  }
 }

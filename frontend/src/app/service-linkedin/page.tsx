@@ -27,6 +27,7 @@ export default function LinkedInServicePage() {
   const [selectedJobFunctions, setSelectedJobFunctions] = useState<string[]>([]);
   const [jobFunctions, setJobFunctions] = useState<string[]>([]);
   const [isJobFunctionsLoading, setIsJobFunctionsLoading] = useState(false);
+  const [jobFunctionError, setJobFunctionError] = useState<string | null>(null);
 
   // Job functions options
   const jobFunctionsOptions = [
@@ -108,17 +109,21 @@ export default function LinkedInServicePage() {
     }
   }, [analysisStatus]);
 
-  const handleJobFunctionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const options = e.target.options;
-    const selectedValues: string[] = [];
+  // Handle job function selection with a maximum of 13
+  const handleJobFunctionToggle = (jobFunction: string) => {
+    setJobFunctionError(null);
     
-    for (let i = 0; i < options.length; i++) {
-      if (options[i].selected) {
-        selectedValues.push(options[i].value);
+    if (selectedJobFunctions.includes(jobFunction)) {
+      // Remove the job function if it's already selected
+      setSelectedJobFunctions(prev => prev.filter(job => job !== jobFunction));
+    } else {
+      // Add the job function if it's not already selected and we haven't reached the limit
+      if (selectedJobFunctions.length >= 13) {
+        setJobFunctionError("Maximum 13 job functions can be selected");
+        return;
       }
+      setSelectedJobFunctions(prev => [...prev, jobFunction]);
     }
-    
-    setSelectedJobFunctions(selectedValues);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -140,7 +145,7 @@ export default function LinkedInServicePage() {
     }
     
     if (selectedJobFunctions.length === 0) {
-      alert('Please select at least one job function');
+      setJobFunctionError('Please select at least one job function');
       return;
     }
     
@@ -161,7 +166,7 @@ export default function LinkedInServicePage() {
           jobFunctions: selectedJobFunctions
         }),
       });
-      
+
       const data = await response.json();
       
       if (response.ok) {
@@ -279,137 +284,267 @@ export default function LinkedInServicePage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-lg shadow-md border border-gray-200">
+      <form onSubmit={handleSubmit} className="space-y-8 bg-white p-8 rounded-xl shadow-lg border border-gray-200">
+        <h2 className="text-2xl font-bold text-indigo-900 mb-6 pb-3 border-b border-indigo-100">Generate New Analysis</h2>
+
+        <div className="space-y-6">
         <div>
-          <label htmlFor="websiteUrl" className="block text-sm font-medium text-indigo-900 mb-2">
-            Website URL
+            <label htmlFor="websiteUrl" className="block text-base font-medium text-indigo-900 mb-2">
+              Website URL <span className="text-red-500">*</span>
           </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" />
+                </svg>
+              </div>
           <input
             type="url"
-            name="websiteUrl"
-            id="websiteUrl"
+                name="websiteUrl"
+                id="websiteUrl"
             required
-            placeholder="https://example.com/"
-            className="block w-full rounded-md border-indigo-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-gray-900 py-3 px-4"
-            value={targetUrl}
-            onChange={(e) => setTargetUrl(e.target.value)}
+                placeholder="https://example.com/"
+                className="block w-full pl-10 rounded-lg border-indigo-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-gray-900 py-3 px-4"
+                value={targetUrl}
+                onChange={(e) => setTargetUrl(e.target.value)}
           />
+        </div>
+            <p className="mt-1 text-sm text-indigo-600">Enter the full URL of the website you want to analyze</p>
         </div>
 
         <div>
-          <label htmlFor="businessPersona" className="block text-sm font-medium text-indigo-900 mb-2">
-            ICP / Business Persona
+            <label htmlFor="businessPersona" className="block text-base font-medium text-indigo-900 mb-2">
+              ICP / Business Persona <span className="text-red-500">*</span>
           </label>
           <textarea
-            name="businessPersona"
-            id="businessPersona"
-            rows={4}
+              name="businessPersona"
+              id="businessPersona"
+              rows={4}
             required
-            placeholder="Describe your business, products/services, and target audience..."
-            className="block w-full rounded-md border-indigo-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-gray-900 py-3 px-4"
+              placeholder="Describe your business, products/services, and target audience..."
+              className="block w-full rounded-lg border-indigo-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-gray-900 py-3 px-4"
           />
+            <p className="mt-1 text-sm text-indigo-600">Provide details about your business and ideal customer profile</p>
         </div>
 
         <div>
-          <label htmlFor="jobFunctions" className="block text-sm font-medium text-indigo-900 mb-2">
-            Job Functions
+            <label className="block text-base font-medium text-indigo-900 mb-2">
+              Job Functions <span className="text-red-500">*</span> <span className="text-sm font-normal text-indigo-600">(Select up to 13)</span>
           </label>
-          <select
-            name="jobFunctions"
-            id="jobFunctions"
-            multiple
-            required
-            className="block w-full rounded-md border-indigo-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-gray-900 py-3 px-4"
-            size={6}
-            onChange={handleJobFunctionChange}
-          >
-            {jobFunctionsOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-          <p className="mt-2 text-sm text-indigo-700 font-medium">Hold Ctrl (or Cmd) to select multiple options</p>
-          {selectedJobFunctions.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {selectedJobFunctions.map(job => (
-                <span key={job} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+            <div className="mt-2 flex flex-wrap gap-2 max-h-60 overflow-y-auto p-2 border border-indigo-200 rounded-lg bg-indigo-50">
+              {jobFunctionsOptions.map(job => (
+                <button
+                  key={job}
+                  type="button"
+                  onClick={() => handleJobFunctionToggle(job)}
+                  className={`px-3 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                    selectedJobFunctions.includes(job)
+                      ? 'bg-indigo-600 text-white shadow-md transform scale-105'
+                      : 'bg-white text-indigo-800 hover:bg-indigo-200 border border-indigo-200'
+                  }`}
+                >
                   {job}
-                </span>
+                </button>
               ))}
             </div>
-          )}
+            {jobFunctionError && (
+              <p className="mt-2 text-sm text-red-600 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                {jobFunctionError}
+              </p>
+            )}
+            {selectedJobFunctions.length > 0 && (
+              <div className="mt-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-indigo-700 font-medium">
+                    Selected: <span className="font-bold">{selectedJobFunctions.length}/13</span>
+                  </p>
+                  {selectedJobFunctions.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedJobFunctions([])}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 underline"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
+                <div className="mt-2 p-3 bg-white rounded-lg border border-indigo-200">
+                  <div className="flex flex-wrap gap-2">
+                    {selectedJobFunctions.map(job => (
+                      <span 
+                        key={job} 
+                        className="inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-indigo-100 text-indigo-800"
+                      >
+                        {job}
+                        <button
+                          type="button"
+                          onClick={() => handleJobFunctionToggle(job)}
+                          className="ml-1.5 text-indigo-600 hover:text-indigo-900"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
+        <div className="pt-6 border-t border-gray-200">
         <button
           type="submit"
-          disabled={isSubmitting}
-          className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200 ${
-            isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
-          }`}
-        >
-          {isSubmitting ? (
-            <>
-              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Processing...
-            </>
-          ) : 'Generate Audience Analysis'}
+            disabled={isSubmitting}
+            className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-lg text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 ${
+              isSubmitting ? 'opacity-70 cursor-not-allowed' : 'transform hover:scale-[1.02]'
+            }`}
+          >
+            {isSubmitting ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Processing...
+              </>
+            ) : 'Generate Audience Analysis'}
         </button>
+        </div>
       </form>
 
       {resultMessage && (
-        <div className={`mt-8 p-6 rounded-lg shadow-md ${
-          analysisStatus === 'error' ? 'bg-red-50 border border-red-200' : 
-          analysisStatus === 'processing' ? 'bg-amber-50 border border-amber-200' : 
-          'bg-emerald-50 border border-emerald-200'
-        }`}>
-          <h2 className={`text-xl font-semibold mb-4 ${
-            analysisStatus === 'error' ? 'text-red-800' : 
-            analysisStatus === 'processing' ? 'text-amber-800' : 
-            'text-emerald-800'
+        <div className={`mt-8 rounded-xl shadow-lg overflow-hidden`}>
+          <div className={`p-1 ${
+            analysisStatus === 'error' ? 'bg-gradient-to-r from-red-500 to-red-600' : 
+            analysisStatus === 'processing' ? 'bg-gradient-to-r from-amber-400 to-amber-500' : 
+            'bg-gradient-to-r from-emerald-400 to-emerald-500'
           }`}>
-            {analysisStatus === 'error' ? 'Error' : 
-             analysisStatus === 'processing' ? 'Processing' : 
-             'Success'}
-          </h2>
+            <div className="bg-white p-6 rounded-lg">
+              <div className="flex items-start">
+                <div className={`flex-shrink-0 p-2 rounded-full ${
+                  analysisStatus === 'error' ? 'bg-red-100 text-red-600' : 
+                  analysisStatus === 'processing' ? 'bg-amber-100 text-amber-600' : 
+                  'bg-emerald-100 text-emerald-600'
+                }`}>
+                  {analysisStatus === 'error' ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : analysisStatus === 'processing' ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  )}
+                </div>
+                <div className="ml-4 flex-1">
+                  <h2 className={`text-xl font-bold mb-2 ${
+                    analysisStatus === 'error' ? 'text-red-800' : 
+                    analysisStatus === 'processing' ? 'text-amber-800' : 
+                    'text-emerald-800'
+                  }`}>
+                    {analysisStatus === 'error' ? 'Error' : 
+                    analysisStatus === 'processing' ? 'Processing' : 
+                    'Success'}
+                  </h2>
           <div className="prose max-w-none">
-            {resultMessage.split('\n').map((line, index) => (
-              <p key={index} className={`mb-2 ${
-                analysisStatus === 'error' ? 'text-red-700' : 
-                analysisStatus === 'processing' ? 'text-amber-700' : 
-                line.startsWith('Audience Analysis:') ? 'text-emerald-900 font-semibold' : 'text-emerald-700'
-              }`}>
-                {line.includes('https://drive.google.com') ? (
-                  <>
-                    {line.split('https://')[0]}
-                    <a 
-                      href={`https://${line.split('https://')[1]}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-indigo-600 hover:text-indigo-800 underline"
-                    >
-                      Google Drive Folder
-                    </a>
-                  </>
-                ) : line}
-              </p>
-            ))}
-          </div>
-          
-          {analysisStatus === 'processing' && (
-            <div className="flex items-center mt-4">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-amber-700 mr-3"></div>
-              <p className="text-amber-700">This may take a few minutes...</p>
+                    {resultMessage.split('\n').map((line, index) => {
+                      // Check if the line contains a Google Drive link
+                      if (line.includes('https://drive.google.com')) {
+                        const beforeLink = line.split('https://')[0];
+                        const link = 'https://' + line.split('https://')[1];
+                        
+                        return (
+                          <p key={index} className={`mb-3 ${
+                            analysisStatus === 'error' ? 'text-red-700' : 
+                            analysisStatus === 'processing' ? 'text-amber-700' : 
+                            line.startsWith('Audience Analysis:') ? 'text-emerald-900 font-semibold' : 'text-emerald-700'
+                          }`}>
+                            {beforeLink}
+                            <a 
+                              href={link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-medium hover:underline"
+                            >
+                              Google Drive Folder
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                                <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
+                              </svg>
+                            </a>
+                          </p>
+                        );
+                      }
+                      
+                      return (
+                        <p key={index} className={`mb-3 ${
+                          analysisStatus === 'error' ? 'text-red-700' : 
+                          analysisStatus === 'processing' ? 'text-amber-700' : 
+                          line.startsWith('Audience Analysis:') ? 'text-emerald-900 font-semibold' : 'text-emerald-700'
+                        }`}>
+                          {line}
+                        </p>
+                      );
+                    })}
+                  </div>
+                  
+                  {analysisStatus === 'processing' && (
+                    <div className="flex items-center mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-amber-700 mr-3"></div>
+                      <p className="text-amber-700">This may take a few minutes. You'll be notified when the analysis is complete.</p>
+                    </div>
+                  )}
+                  
+                  {analysisStatus === 'completed' && (
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <a 
+                        href="https://drive.google.com/drive/u/0/folders/1qLEEcY658Yj1p409NdrG9JACKATpVTin"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-sm transition-colors duration-200"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                          <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                          <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
+                        </svg>
+                        Open in Google Drive
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.scrollTo({
+                            top: document.getElementById('analysis-results')?.offsetTop || 0,
+                            behavior: 'smooth'
+                          });
+                        }}
+                        className="inline-flex items-center px-4 py-2 border border-indigo-300 text-sm font-medium rounded-md text-indigo-700 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-sm transition-colors duration-200"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                        View Results Below
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          )}
+          </div>
         </div>
       )}
 
       {analysis && (
-        <div className="mt-8 bg-white p-6 rounded-lg shadow-md border border-indigo-200">
+        <div id="analysis-results" className="mt-8 bg-white p-6 rounded-xl shadow-lg border border-indigo-200">
           <h2 className="text-2xl font-bold text-indigo-900 mb-6 pb-3 border-b border-indigo-100">Analysis Results</h2>
           <div className="bg-gradient-to-r from-indigo-50 to-white rounded-lg shadow-md border border-indigo-200 overflow-hidden">
             {typeof analysis.content === 'object' && analysis.content !== null ? (
