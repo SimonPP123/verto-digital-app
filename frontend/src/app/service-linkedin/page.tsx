@@ -186,76 +186,132 @@ export default function LinkedInServicePage() {
 
   // Add this function to render structured content
   const renderStructuredContent = (content: any) => {
-    if (!content) return null;
-    
-    // Process HTML content to ensure XML-like tags are properly displayed
+    if (!content) return <div>No content available</div>;
+
+    // Helper function to process HTML content safely
     const processHtmlContent = (html: string) => {
-      if (!html) return '';
-      
-      // Strip out any script tags for security
+      if (!html) return "";
+      // Basic sanitization (remove script tags)
       return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
     };
-    
+
+    // Helper function to download analysis as text file
+    const downloadAnalysis = () => {
+      if (!analysis?.content) return;
+      
+      const content = typeof analysis.content === 'string' 
+        ? analysis.content 
+        : JSON.stringify(analysis.content, null, 2);
+      
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const date = new Date().toISOString().split('T')[0];
+      a.href = url;
+      a.download = `linkedin-analysis-${date}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    };
+
     return (
       <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-bold text-gray-900">Analysis Results</h2>
+          <button
+            onClick={downloadAnalysis}
+            className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700"
+          >
+            Download Analysis
+          </button>
+        </div>
+
         {/* ICP Section */}
         {content.icp && (
-          <div className="bg-indigo-50 p-6 rounded-lg shadow-md border border-indigo-200">
-            <h3 className="text-xl font-semibold mb-4 text-indigo-800">Ideal Customer Profile (ICP)</h3>
-            <div className="prose max-w-none text-gray-900">
-              <div dangerouslySetInnerHTML={{ __html: processHtmlContent(content.icp) }} />
-            </div>
+          <div className="mb-8">
+            <h3 className="text-xl font-bold text-indigo-900 mb-4">Ideal Customer Profile (ICP)</h3>
+            <div 
+              className="prose max-w-none" 
+              dangerouslySetInnerHTML={{ 
+                __html: processHtmlContent(content.icp) 
+              }} 
+            />
           </div>
         )}
-        
+
         {/* Website Summary Section */}
         {content.websiteSummary && (
-          <div className="bg-emerald-50 p-6 rounded-lg shadow-md border border-emerald-200">
-            <h3 className="text-xl font-semibold mb-4 text-emerald-800">Website Summary</h3>
-            <div className="prose max-w-none text-gray-900">
-              <div dangerouslySetInnerHTML={{ __html: processHtmlContent(content.websiteSummary) }} />
-            </div>
+          <div className="mb-8">
+            <h3 className="text-xl font-bold text-emerald-800 mb-4">Website Summary</h3>
+            <div 
+              className="prose max-w-none" 
+              dangerouslySetInnerHTML={{ 
+                __html: processHtmlContent(content.websiteSummary) 
+              }} 
+            />
           </div>
         )}
-        
+
         {/* Scoring Section */}
         {content.scoring && (
-          <div className="bg-amber-50 p-6 rounded-lg shadow-md border border-amber-200">
-            <h3 className="text-xl font-semibold mb-4 text-amber-800">Audience Scoring</h3>
-            <div className="prose max-w-none text-gray-900">
-              <div dangerouslySetInnerHTML={{ __html: processHtmlContent(content.scoring) }} />
-            </div>
+          <div className="mb-8">
+            <h3 className="text-xl font-bold text-amber-800 mb-4">Audience Scoring</h3>
+            <div 
+              className="prose max-w-none" 
+              dangerouslySetInnerHTML={{ 
+                __html: processHtmlContent(content.scoring) 
+              }} 
+            />
           </div>
         )}
-        
+
         {/* Categories Section */}
         {content.categories && (
-          <div className="bg-purple-50 p-6 rounded-lg shadow-md border border-purple-200">
-            <h3 className="text-xl font-semibold mb-4 text-purple-800">Audience Categories</h3>
-            <div className="prose max-w-none text-gray-900">
-              <div dangerouslySetInnerHTML={{ __html: processHtmlContent(content.categories) }} />
-            </div>
+          <div className="mb-8">
+            <h3 className="text-xl font-bold text-purple-800 mb-4">Audience Categories</h3>
+            <div 
+              className="prose max-w-none" 
+              dangerouslySetInnerHTML={{ 
+                __html: processHtmlContent(content.categories) 
+              }} 
+            />
           </div>
         )}
-        
-        {/* Fallback for any additional sections */}
+
+        {/* Summary Section (if it exists separately) */}
+        {content.summary && (
+          <div className="mb-8">
+            <h3 className="text-xl font-bold text-blue-800 mb-4">Summary</h3>
+            <div 
+              className="prose max-w-none" 
+              dangerouslySetInnerHTML={{ 
+                __html: processHtmlContent(content.summary) 
+              }} 
+            />
+          </div>
+        )}
+
+        {/* Handle any additional sections not specifically defined */}
         {Object.entries(content).map(([key, value]) => {
-          // Skip the sections we've already handled
-          if (['icp', 'websiteSummary', 'scoring', 'categories'].includes(key)) {
+          // Skip sections we've already rendered
+          if (['icp', 'websiteSummary', 'scoring', 'categories', 'summary'].includes(key)) {
             return null;
           }
           
-          if (typeof value === 'string' && value.trim()) {
-            return (
-              <div key={key} className="bg-blue-50 p-6 rounded-lg shadow-md border border-blue-200">
-                <h3 className="text-xl font-semibold mb-4 text-blue-800">{key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1')}</h3>
-                <div className="prose max-w-none text-gray-900">
-                  <div dangerouslySetInnerHTML={{ __html: processHtmlContent(value as string) }} />
-                </div>
-              </div>
-            );
-          }
-          return null;
+          return (
+            <div key={key} className="mb-8">
+              <h3 className="text-xl font-bold text-gray-800 mb-4">
+                {key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')}
+              </h3>
+              <div
+                className="prose max-w-none"
+                dangerouslySetInnerHTML={{
+                  __html: typeof value === 'string' ? processHtmlContent(value as string) : JSON.stringify(value, null, 2)
+                }}
+              />
+            </div>
+          );
         })}
       </div>
     );
@@ -572,74 +628,56 @@ export default function LinkedInServicePage() {
       )}
 
       {analysis && (
-        <div id="analysis-results" className="mt-8 bg-white p-6 rounded-xl shadow-lg border border-indigo-200">
-          <h2 className="text-2xl font-bold text-indigo-900 mb-6 pb-3 border-b border-indigo-100">Analysis Results</h2>
-          <div className="bg-gradient-to-r from-indigo-50 to-white rounded-lg shadow-md border border-indigo-200 overflow-hidden">
-            {typeof analysis.content === 'object' && analysis.content !== null ? (
-              renderStructuredContent(analysis.content)
-            ) : (
-              <div className="p-6">
-                {/* Try to parse the content string as JSON first */}
-                {(() => {
-                  try {
-                    // If content is a string but actually contains JSON
-                    if (typeof analysis.content === 'string') {
-                      const parsedContent = JSON.parse(analysis.content);
-                      if (typeof parsedContent === 'object' && parsedContent !== null) {
-                        return renderStructuredContent(parsedContent);
-                      }
-                    }
-                  } catch (e) {
-                    // Not JSON, continue with regular HTML rendering
-                  }
-                  
-                  // Regular HTML content rendering
+        <div className="bg-white rounded-lg shadow-md p-6 mt-8">
+          {typeof analysis.content === 'object' ? (
+            renderStructuredContent(analysis.content)
+          ) : (
+            <>
+              {(() => {
+                try {
+                  // Try to parse JSON first
+                  const parsedContent = JSON.parse(analysis.content);
+                  return renderStructuredContent(parsedContent);
+                } catch (e) {
+                  // If parsing fails, treat as HTML
                   return (
-                    <div 
-                      className="prose max-w-none text-gray-900"
-                      dangerouslySetInnerHTML={{ 
-                        __html: typeof analysis.content === 'string' 
-                          ? analysis.content
-                          : 'No content available'
-                      }} 
-                    />
+                    <div>
+                      <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-2xl font-bold text-gray-900">Analysis Results</h2>
+                        <button
+                          onClick={() => {
+                            const blob = new Blob([
+                              typeof analysis.content === 'string' 
+                                ? analysis.content 
+                                : JSON.stringify(analysis.content, null, 2)
+                            ], { type: 'text/plain' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            const date = new Date().toISOString().split('T')[0];
+                            a.href = url;
+                            a.download = `linkedin-analysis-${date}.txt`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                          }}
+                          className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700"
+                        >
+                          Download Analysis
+                        </button>
+                      </div>
+                      <div 
+                        className="prose max-w-none" 
+                        dangerouslySetInnerHTML={{ 
+                          __html: analysis.content || '<p>No content available</p>' 
+                        }} 
+                      />
+                    </div>
                   );
-                })()}
-              </div>
-            )}
-          </div>
-          
-          {/* Download button for analysis results */}
-          <div className="mt-6 flex justify-end">
-            <button
-              onClick={() => {
-                // Create a Blob with the analysis content
-                const contentString = typeof analysis.content === 'object'
-                  ? JSON.stringify(analysis.content, null, 2)
-                  : analysis.content as string;
-                
-                const blob = new Blob([contentString], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                
-                // Create a link and trigger download
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `linkedin-analysis-${new Date().toISOString().split('T')[0]}.txt`;
-                document.body.appendChild(a);
-                a.click();
-                
-                // Clean up
-                URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-              }}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-sm transition-colors duration-200"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-              Download Analysis
-            </button>
-          </div>
+                }
+              })()}
+            </>
+          )}
         </div>
       )}
 
@@ -665,7 +703,7 @@ export default function LinkedInServicePage() {
         .prose p {
           margin-bottom: 0.75rem;
           line-height: 1.6;
-          color: #1f2937;
+          color: #374151;
         }
         .prose strong {
           font-weight: 600;
@@ -676,14 +714,14 @@ export default function LinkedInServicePage() {
           font-weight: 600;
           margin-top: 1.5rem;
           margin-bottom: 0.75rem;
-          color: #1e3a8a;
+          color: #1f2937;
         }
         .prose h4 {
           font-size: 1.125rem;
           font-weight: 600;
           margin-top: 1.25rem;
           margin-bottom: 0.5rem;
-          color: #1e40af;
+          color: #374151;
         }
         
         /* XML-like tags styling - improved for better visibility */
@@ -715,7 +753,9 @@ export default function LinkedInServicePage() {
         .prose description,
         .prose high_relevance,
         .prose medium_relevance,
-        .prose low_relevance {
+        .prose low_relevance,
+        .prose audience-category,
+        .audience-category {
           display: block;
           margin: 1.25rem 0;
           padding: 1.25rem;
@@ -725,6 +765,15 @@ export default function LinkedInServicePage() {
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
           font-size: 1rem;
           color: #1f2937;
+        }
+
+        /* Additional selectors for content in the examples */
+        .prose div.audience-category {
+          margin: 1.25rem 0;
+          padding: 1.25rem;
+          border-radius: 0.5rem;
+          border-left: 5px solid #8b5cf6;
+          background-color: #f5f3ff;
         }
         
         /* Add a label to each XML tag for better context */
@@ -814,20 +863,20 @@ export default function LinkedInServicePage() {
         
         .prose explanation {
           font-style: italic;
-          color: #1f2937;
-          border-left-color: #4f46e5;
+          color: #4b5563;
+          border-left-color: #6366f1;
           background-color: #eef2ff;
         }
         
         .prose name {
           font-weight: 600;
           color: #1e3a8a;
-          border-left-color: #7c3aed;
+          border-left-color: #8b5cf6;
           background-color: #f5f3ff;
         }
         
         .prose high_relevance {
-          border-left-color: #047857;
+          border-left-color: #059669;
           background-color: #ecfdf5;
         }
         
@@ -837,8 +886,33 @@ export default function LinkedInServicePage() {
         }
         
         .prose low_relevance {
-          border-left-color: #b91c1c;
+          border-left-color: #dc2626;
           background-color: #fef2f2;
+        }
+        
+        .prose business_summary {
+          border-left-color: #0891b2;
+          background-color: #ecfeff;
+        }
+
+        /* Style for audience categories */
+        .prose .audience-category h3,
+        .audience-category h3 {
+          font-size: 1.25rem;
+          font-weight: 600;
+          margin-top: 0;
+          margin-bottom: 0.75rem;
+          color: #1f2937;
+        }
+        
+        .prose .audience-category p,
+        .audience-category p {
+          margin-bottom: 0.75rem;
+        }
+        
+        .prose .audience-category ul,
+        .audience-category ul {
+          margin-top: 0.75rem;
         }
         
         /* Add nested styling for better hierarchy */
@@ -870,7 +944,9 @@ export default function LinkedInServicePage() {
         .prose description > *,
         .prose high_relevance > *,
         .prose medium_relevance > *,
-        .prose low_relevance > * {
+        .prose low_relevance > *,
+        .prose .audience-category > *,
+        .audience-category > * {
           margin-left: 0.5rem;
         }
       `}</style>

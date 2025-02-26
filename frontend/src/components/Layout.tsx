@@ -190,7 +190,6 @@ export default function Layout({ children }: LayoutProps) {
                             <span className="mr-3">👥</span>
                             <div className="flex-1 flex items-center justify-between">
                               <span>LinkedIn AI Audience</span>
-                              <span className="ml-2 px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">Under Construction</span>
                             </div>
                           </Link>
                           <Link 

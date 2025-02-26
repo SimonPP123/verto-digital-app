@@ -24,7 +24,7 @@ const services = [
     description: 'AI-powered LinkedIn audience targeting and analysis',
     href: '/service-linkedin',
     icon: '👥',
-    underConstruction: true
+    underConstruction: false
   },
   {
     title: 'AI Ad Copy',
