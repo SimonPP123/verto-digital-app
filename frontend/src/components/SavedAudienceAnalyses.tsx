@@ -29,8 +29,64 @@ const renderStructuredContent = (content: any) => {
     return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
   };
 
+  // Helper function to download analysis as text file
+  const downloadAnalysis = (analysisContent: any) => {
+    if (!analysisContent) return;
+    
+    const content = typeof analysisContent === 'string' 
+      ? analysisContent 
+      : JSON.stringify(analysisContent, null, 2);
+    
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().split('T')[0];
+    a.href = url;
+    a.download = `linkedin-analysis-${date}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Format keys for display (convert camelCase or snake_case to Title Case)
+  const formatKey = (key: string) => {
+    return key
+      .replace(/_/g, ' ')
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/^./, str => str.toUpperCase())
+      .trim();
+  };
+
+  // Determine if content is relevance category related
+  const isRelevanceCategory = (key: string) => {
+    return key.includes('relevance') || 
+           key.includes('category') || 
+           ['high_relevance', 'medium_relevance', 'low_relevance'].includes(key);
+  };
+
+  // Determine color class based on section type
+  const getSectionColorClass = (key: string) => {
+    if (key === 'icp') return 'text-indigo-900';
+    if (key === 'websiteSummary' || key.includes('summary')) return 'text-emerald-800';
+    if (key.includes('scoring') || key.includes('score')) return 'text-amber-800';
+    if (key.includes('categor')) return 'text-purple-800';
+    if (isRelevanceCategory(key)) return 'text-violet-800';
+    return 'text-gray-800';
+  };
+
   return (
     <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-gray-900">Analysis Results</h2>
+        <button
+          onClick={() => downloadAnalysis(content)}
+          className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700"
+        >
+          Download Analysis
+        </button>
+      </div>
+      
       {/* ICP Section */}
       {content.icp && (
         <div className="mb-8">
@@ -70,6 +126,32 @@ const renderStructuredContent = (content: any) => {
         </div>
       )}
 
+      {/* Job Title Scoring Analysis */}
+      {content.job_title_scoring_analysis && (
+        <div className="mb-8">
+          <h3 className="text-xl font-bold text-amber-800 mb-4">Job Title Scoring Analysis</h3>
+          <div 
+            className="prose max-w-none" 
+            dangerouslySetInnerHTML={{ 
+              __html: processHtmlContent(content.job_title_scoring_analysis) 
+            }} 
+          />
+        </div>
+      )}
+
+      {/* Relevance Categories Section */}
+      {content.relevance_categories && (
+        <div className="mb-8">
+          <h3 className="text-xl font-bold text-violet-800 mb-4">Relevance Categories</h3>
+          <div 
+            className="prose max-w-none" 
+            dangerouslySetInnerHTML={{ 
+              __html: processHtmlContent(content.relevance_categories) 
+            }} 
+          />
+        </div>
+      )}
+
       {/* Categories Section */}
       {content.categories && (
         <div className="mb-8">
@@ -96,17 +178,96 @@ const renderStructuredContent = (content: any) => {
         </div>
       )}
 
+      {/* Relevance Levels Sections */}
+      {(content.high_relevance || content.medium_relevance || content.low_relevance) && (
+        <div className="mb-8">
+          <h3 className="text-xl font-bold text-violet-800 mb-4">Audience Relevance Levels</h3>
+          
+          {content.high_relevance && (
+            <div className="mb-6 bg-green-50 border-l-4 border-green-500 p-4 rounded-md">
+              <h4 className="text-lg font-semibold text-green-800 mb-2">High Relevance</h4>
+              <div 
+                className="prose max-w-none" 
+                dangerouslySetInnerHTML={{ 
+                  __html: processHtmlContent(content.high_relevance) 
+                }} 
+              />
+            </div>
+          )}
+          
+          {content.medium_relevance && (
+            <div className="mb-6 bg-amber-50 border-l-4 border-amber-500 p-4 rounded-md">
+              <h4 className="text-lg font-semibold text-amber-800 mb-2">Medium Relevance</h4>
+              <div 
+                className="prose max-w-none" 
+                dangerouslySetInnerHTML={{ 
+                  __html: processHtmlContent(content.medium_relevance) 
+                }} 
+              />
+            </div>
+          )}
+          
+          {content.low_relevance && (
+            <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
+              <h4 className="text-lg font-semibold text-red-800 mb-2">Low Relevance</h4>
+              <div 
+                className="prose max-w-none" 
+                dangerouslySetInnerHTML={{ 
+                  __html: processHtmlContent(content.low_relevance) 
+                }} 
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Category Sections (numbered categories) */}
+      {(() => {
+        const categoryKeys = Object.keys(content).filter(key => /^category\d+$/.test(key));
+        if (categoryKeys.length === 0) return null;
+        
+        return (
+          <div className="mb-8">
+            <h3 className="text-xl font-bold text-purple-800 mb-4">Specific Audience Categories</h3>
+            {categoryKeys.sort().map((key) => (
+              <div key={key} className="audience-category mb-6">
+                <h4 className="text-lg font-semibold text-purple-800 mb-2">
+                  {formatKey(key)}
+                </h4>
+                <div 
+                  className="prose max-w-none" 
+                  dangerouslySetInnerHTML={{ 
+                    __html: processHtmlContent(content[key]) 
+                  }} 
+                />
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Handle any additional sections not specifically defined */}
       {Object.entries(content).map(([key, value]) => {
         // Skip sections we've already rendered
-        if (['icp', 'websiteSummary', 'scoring', 'categories', 'summary'].includes(key)) {
+        if ([
+          'icp', 
+          'websiteSummary', 
+          'scoring', 
+          'categories', 
+          'summary', 
+          'job_title_scoring_analysis',
+          'relevance_categories',
+          'high_relevance', 
+          'medium_relevance', 
+          'low_relevance'
+        ].includes(key) || /^category\d+$/.test(key)) {
           return null;
         }
         
         return (
           <div key={key} className="mb-8">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">
-              {key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')}
+            <h3 className={`text-xl font-bold ${getSectionColorClass(key)} mb-4`}>
+              {formatKey(key)}
             </h3>
             <div
               className="prose max-w-none"
@@ -432,9 +593,7 @@ const SavedAudienceAnalyses: React.FC<SavedAudienceAnalysesProps> = ({ refreshTr
         .prose description,
         .prose high_relevance,
         .prose medium_relevance,
-        .prose low_relevance,
-        .prose audience-category,
-        .audience-category {
+        .prose low_relevance {
           display: block;
           margin: 1.25rem 0;
           padding: 1.25rem;
@@ -446,13 +605,30 @@ const SavedAudienceAnalyses: React.FC<SavedAudienceAnalysesProps> = ({ refreshTr
           color: #1f2937;
         }
 
-        /* Additional selectors for content in the examples */
-        .prose div.audience-category {
-          margin: 1.25rem 0;
-          padding: 1.25rem;
+        /* Specific styling for audience-category divs */
+        .prose .audience-category,
+        .audience-category {
+          display: block;
+          margin: 1.5rem 0;
+          padding: 1.5rem;
           border-radius: 0.5rem;
           border-left: 5px solid #8b5cf6;
           background-color: #f5f3ff;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Make h3 inside audience-category more prominent */
+        .prose .audience-category h3,
+        .audience-category h3 {
+          color: #6d28d9;
+          font-size: 1.25rem;
+          margin-top: 0;
+        }
+
+        /* Ensure ul inside audience-category displays properly */
+        .prose .audience-category ul,
+        .audience-category ul {
+          margin-top: 0.75rem;
         }
         
         /* Add a label to each XML tag for better context */
@@ -507,127 +683,6 @@ const SavedAudienceAnalyses: React.FC<SavedAudienceAnalysesProps> = ({ refreshTr
         .prose business_summary::before { content: "Business Summary"; }
         .prose job_title_scoring_analysis::before { content: "Job Title Scoring Analysis"; }
         .prose scoring_system::before { content: "Scoring System"; }
-        .prose analysis::before { content: "Analysis"; }
-        .prose relevance_categories::before { content: "Relevance Categories"; }
-        .prose name::before { content: "Name"; }
-        .prose description::before { content: "Description"; }
-        .prose high_relevance::before { content: "High Relevance"; }
-        .prose medium_relevance::before { content: "Medium Relevance"; }
-        .prose low_relevance::before { content: "Low Relevance"; }
-        
-        .prose firmographic {
-          border-left-color: #047857;
-          background-color: #ecfdf5;
-        }
-        
-        .prose technographic {
-          border-left-color: #1d4ed8;
-          background-color: #eff6ff;
-        }
-        
-        .prose behavioral_psychographic {
-          border-left-color: #6d28d9;
-          background-color: #f5f3ff;
-        }
-        
-        .prose organizational_operational {
-          border-left-color: #be185d;
-          background-color: #fdf2f8;
-        }
-        
-        .prose strategic_alignment {
-          border-left-color: #b45309;
-          background-color: #fffbeb;
-        }
-        
-        .prose explanation {
-          font-style: italic;
-          color: #4b5563;
-          border-left-color: #6366f1;
-          background-color: #eef2ff;
-        }
-        
-        .prose name {
-          font-weight: 600;
-          color: #1e3a8a;
-          border-left-color: #8b5cf6;
-          background-color: #f5f3ff;
-        }
-        
-        .prose high_relevance {
-          border-left-color: #059669;
-          background-color: #ecfdf5;
-        }
-        
-        .prose medium_relevance {
-          border-left-color: #d97706;
-          background-color: #fffbeb;
-        }
-        
-        .prose low_relevance {
-          border-left-color: #dc2626;
-          background-color: #fef2f2;
-        }
-        
-        .prose business_summary {
-          border-left-color: #0891b2;
-          background-color: #ecfeff;
-        }
-
-        /* Style for audience categories */
-        .prose .audience-category h3,
-        .audience-category h3 {
-          font-size: 1.25rem;
-          font-weight: 600;
-          margin-top: 0;
-          margin-bottom: 0.75rem;
-          color: #1f2937;
-        }
-        
-        .prose .audience-category p,
-        .audience-category p {
-          margin-bottom: 0.75rem;
-        }
-        
-        .prose .audience-category ul,
-        .audience-category ul {
-          margin-top: 0.75rem;
-        }
-        
-        /* Add nested styling for better hierarchy */
-        .prose icp > *,
-        .prose firmographic > *,
-        .prose explanation > *,
-        .prose technographic > *,
-        .prose behavioral_psychographic > *,
-        .prose organizational_operational > *,
-        .prose strategic_alignment > *,
-        .prose summary > *,
-        .prose page_analysis > *,
-        .prose business_summary > *,
-        .prose job_title_scoring_analysis > *,
-        .prose scoring_system > *,
-        .prose analysis > *,
-        .prose relevance_categories > *,
-        .prose category1 > *,
-        .prose category2 > *,
-        .prose category3 > *,
-        .prose category4 > *,
-        .prose category5 > *,
-        .prose category6 > *,
-        .prose category7 > *,
-        .prose category8 > *,
-        .prose category9 > *,
-        .prose category10 > *,
-        .prose name > *,
-        .prose description > *,
-        .prose high_relevance > *,
-        .prose medium_relevance > *,
-        .prose low_relevance > *,
-        .prose .audience-category > *,
-        .audience-category > * {
-          margin-left: 0.5rem;
-        }
       `}</style>
     </div>
   );
