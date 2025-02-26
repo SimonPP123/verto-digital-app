@@ -26,7 +26,17 @@ const renderStructuredContent = (content: any) => {
   const processHtmlContent = (html: string) => {
     if (!html) return "";
     // Basic sanitization (remove script tags)
-    return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    let sanitized = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    
+    // Special handling for scoring_system content to ensure proper formatting
+    // Adding a wrapper class if needed for specific styling
+    if (html.includes('<scoring_system>') || html.includes('scoring_system')) {
+      sanitized = sanitized.replace(/<scoring_system>/gi, '<div class="scoring_system">');
+      sanitized = sanitized.replace(/<\/scoring_system>/gi, '</div>');
+    }
+    
+    // Ensure all content is visible and properly formatted
+    return sanitized;
   };
 
   // Helper function to download analysis as text file
@@ -178,6 +188,19 @@ const renderStructuredContent = (content: any) => {
         </div>
       )}
 
+      {/* Scoring System Section - Handle specifically */}
+      {content.scoring_system && (
+        <div className="mb-8">
+          <h3 className="text-xl font-bold text-amber-800 mb-4">Scoring System</h3>
+          <div 
+            className="prose max-w-none" 
+            dangerouslySetInnerHTML={{ 
+              __html: processHtmlContent(content.scoring_system) 
+            }} 
+          />
+        </div>
+      )}
+
       {/* Relevance Levels Sections */}
       {(content.high_relevance || content.medium_relevance || content.low_relevance) && (
         <div className="mb-8">
@@ -259,7 +282,8 @@ const renderStructuredContent = (content: any) => {
           'relevance_categories',
           'high_relevance', 
           'medium_relevance', 
-          'low_relevance'
+          'low_relevance',
+          'scoring_system'
         ].includes(key) || /^category\d+$/.test(key)) {
           return null;
         }
@@ -683,6 +707,50 @@ const SavedAudienceAnalyses: React.FC<SavedAudienceAnalysesProps> = ({ refreshTr
         .prose business_summary::before { content: "Business Summary"; }
         .prose job_title_scoring_analysis::before { content: "Job Title Scoring Analysis"; }
         .prose scoring_system::before { content: "Scoring System"; }
+        
+        /* Enhanced styling for scoring system to ensure all nested content displays properly */
+        .prose scoring_system h3,
+        .prose .scoring_system h3 {
+          font-size: 1.25rem;
+          font-weight: 600;
+          color: #92400e;
+          margin-top: 1.25rem;
+          margin-bottom: 0.75rem;
+        }
+        
+        .prose scoring_system h4,
+        .prose .scoring_system h4 {
+          font-size: 1.125rem;
+          font-weight: 600;
+          color: #b45309;
+          margin-top: 1rem;
+          margin-bottom: 0.5rem;
+        }
+        
+        .prose scoring_system ul,
+        .prose .scoring_system ul {
+          list-style-type: disc;
+          margin-left: 1.5rem;
+          margin-bottom: 1rem;
+        }
+        
+        .prose scoring_system li,
+        .prose .scoring_system li {
+          margin-bottom: 0.5rem;
+        }
+        
+        .prose scoring_system p,
+        .prose .scoring_system p {
+          margin-bottom: 0.75rem;
+          line-height: 1.6;
+        }
+        
+        /* Special styling for the scoring levels */
+        .prose scoring_system strong,
+        .prose .scoring_system strong {
+          color: #92400e;
+          font-weight: 600;
+        }
       `}</style>
     </div>
   );
