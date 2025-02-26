@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Message, File, ChatSession, ChatHistoryResponse, ModelOption } from '../../types/chat';
 import { MODEL_OPTIONS } from '../../types/chat';
-import Image from 'next/image';
 
 interface ChatFile {
   _id?: string;
@@ -15,7 +14,6 @@ interface ChatFile {
   type: string;
   size: number;
   path?: string;
-  sheetNames?: string[];
 }
 
 // Helper function to create messages with timestamp
@@ -135,7 +133,7 @@ export default function ChatServicePage() {
         clearInterval(pollInterval);
       }
     };
-  }, [isProcessing, activeChatId, apiUrl, messages]);
+  }, [isProcessing, activeChatId, apiUrl]);
 
   // Fetch chat sessions on mount
   useEffect(() => {
@@ -669,7 +667,7 @@ export default function ChatServicePage() {
       {/* Sidebar */}
       <div className={`bg-gray-800 text-white ${isSidebarOpen ? 'w-64' : 'w-16'} transition-all duration-300 flex flex-col`}>
         <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-          <h2 className={`font-semibold ${isSidebarOpen ? 'block' : 'hidden'}`}>Chat Sessions</h2>
+          <h2 className={`font-semibold text-blue-200 ${isSidebarOpen ? 'block' : 'hidden'}`}>Chat Sessions</h2>
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="p-2 hover:bg-gray-700 rounded"
@@ -686,7 +684,7 @@ export default function ChatServicePage() {
                 value={newChatName}
                 onChange={(e) => setNewChatName(e.target.value)}
                 placeholder="New chat name..."
-                className="w-full px-3 py-2 bg-gray-700 rounded text-white placeholder-gray-400"
+                className="w-full px-3 py-2 bg-gray-700 rounded text-white placeholder-gray-300"
               />
               <button
                 onClick={createNewChat}
@@ -694,7 +692,7 @@ export default function ChatServicePage() {
               >
                 New Chat
               </button>
-            </div>
+          </div>
 
             <div className="flex-1 overflow-y-auto">
               {chatSessions.map(chat => (
@@ -734,8 +732,8 @@ export default function ChatServicePage() {
                       />
                     ) : (
                       <>
-                        <div className="font-medium">{chat.name}</div>
-                        <div className="text-sm text-gray-400">
+                        <div className="font-medium text-white">{chat.name}</div>
+                        <div className="text-sm text-gray-300">
                           {new Date(chat.lastActivity).toLocaleDateString()}
                         </div>
                       </>
@@ -787,7 +785,7 @@ export default function ChatServicePage() {
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                className="block w-64 px-2 py-1 text-sm bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="block w-64 px-2 py-1 text-sm bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900"
               >
                 {MODEL_OPTIONS.map((model) => (
                   <option key={model.value} value={model.value}>
@@ -805,18 +803,6 @@ export default function ChatServicePage() {
           className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"
           style={{ height: 'calc(100vh - 160px)' }}
         >
-          {messages.length === 0 && !isProcessing && activeChatId && (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="bg-blue-100 p-3 rounded-full mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">Start a new conversation</h3>
-              <p className="text-gray-500 max-w-md mb-4">Upload files using the + button below and ask questions about them</p>
-            </div>
-          )}
-
           {messages.map((message, index) => (
             <div
               key={`${message.role}-${message.timestamp || index}`}
@@ -877,7 +863,7 @@ export default function ChatServicePage() {
                 focus:border-blue-500 focus:ring-blue-500
                 disabled:opacity-50 disabled:cursor-not-allowed
                 resize-y min-h-[40px] max-h-[80px] p-2
-                text-base leading-relaxed"
+                text-base leading-relaxed text-gray-900 placeholder-gray-500"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -967,7 +953,7 @@ export default function ChatServicePage() {
             </div>
           )}
 
-          <div className="mt-1 text-xs text-gray-600">
+          <div className="mt-1 text-xs text-gray-700 font-medium">
             <strong>File Upload Instructions:</strong> Upload one file at a time (max 10) • Send a message about each file • Supported: PDF, Excel, CSV<br/>
             <strong>For Excel Files:</strong> After upload, specify which sheets to use (comma-separated). Example: "Please use sheets: Sheet Sheet1, Sheet Sheet2, Sheet [Name]"
           </div>

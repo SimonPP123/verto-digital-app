@@ -22,6 +22,14 @@ type Analysis = {
 const renderStructuredContent = (content: any) => {
   if (!content) return null;
   
+  // Process HTML content to ensure XML-like tags are properly displayed
+  const processHtmlContent = (html: string) => {
+    if (!html) return '';
+    
+    // Strip out any script tags for security
+    return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  };
+  
   return (
     <div className="space-y-6">
       {/* ICP Section */}
@@ -29,7 +37,7 @@ const renderStructuredContent = (content: any) => {
         <div className="bg-indigo-50 p-6 rounded-lg shadow-md border border-indigo-200">
           <h3 className="text-xl font-semibold mb-4 text-indigo-800">Ideal Customer Profile (ICP)</h3>
           <div className="prose max-w-none text-gray-900">
-            <div dangerouslySetInnerHTML={{ __html: content.icp }} />
+            <div dangerouslySetInnerHTML={{ __html: processHtmlContent(content.icp) }} />
           </div>
         </div>
       )}
@@ -39,7 +47,7 @@ const renderStructuredContent = (content: any) => {
         <div className="bg-emerald-50 p-6 rounded-lg shadow-md border border-emerald-200">
           <h3 className="text-xl font-semibold mb-4 text-emerald-800">Website Summary</h3>
           <div className="prose max-w-none text-gray-900">
-            <div dangerouslySetInnerHTML={{ __html: content.websiteSummary }} />
+            <div dangerouslySetInnerHTML={{ __html: processHtmlContent(content.websiteSummary) }} />
           </div>
         </div>
       )}
@@ -49,7 +57,7 @@ const renderStructuredContent = (content: any) => {
         <div className="bg-amber-50 p-6 rounded-lg shadow-md border border-amber-200">
           <h3 className="text-xl font-semibold mb-4 text-amber-800">Audience Scoring</h3>
           <div className="prose max-w-none text-gray-900">
-            <div dangerouslySetInnerHTML={{ __html: content.scoring }} />
+            <div dangerouslySetInnerHTML={{ __html: processHtmlContent(content.scoring) }} />
           </div>
         </div>
       )}
@@ -59,10 +67,30 @@ const renderStructuredContent = (content: any) => {
         <div className="bg-purple-50 p-6 rounded-lg shadow-md border border-purple-200">
           <h3 className="text-xl font-semibold mb-4 text-purple-800">Audience Categories</h3>
           <div className="prose max-w-none text-gray-900">
-            <div dangerouslySetInnerHTML={{ __html: content.categories }} />
+            <div dangerouslySetInnerHTML={{ __html: processHtmlContent(content.categories) }} />
           </div>
         </div>
       )}
+      
+      {/* Fallback for any additional sections */}
+      {Object.entries(content).map(([key, value]) => {
+        // Skip the sections we've already handled
+        if (['icp', 'websiteSummary', 'scoring', 'categories'].includes(key)) {
+          return null;
+        }
+        
+        if (typeof value === 'string' && value.trim()) {
+          return (
+            <div key={key} className="bg-blue-50 p-6 rounded-lg shadow-md border border-blue-200">
+              <h3 className="text-xl font-semibold mb-4 text-blue-800">{key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1')}</h3>
+              <div className="prose max-w-none text-gray-900">
+                <div dangerouslySetInnerHTML={{ __html: processHtmlContent(value as string) }} />
+              </div>
+            </div>
+          );
+        }
+        return null;
+      })}
     </div>
   );
 };
@@ -257,16 +285,78 @@ const SavedAudienceAnalyses: React.FC<SavedAudienceAnalysesProps> = ({ refreshTr
           
           {expandedAnalysis === analysis.id && (
             <div className="border-t border-gray-200 p-6 bg-gray-50">
-              {analysis.isStructured && typeof analysis.content === 'object' ? (
-                renderStructuredContent(analysis.content)
-              ) : (
-                <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-                  <div 
-                    className="prose max-w-none text-gray-900"
-                    dangerouslySetInnerHTML={{ __html: analysis.content as string }} 
-                  />
-                </div>
-              )}
+              {(() => {
+                try {
+                  // If isStructured flag is true or content is an object
+                  if (analysis.isStructured || (typeof analysis.content === 'object' && analysis.content !== null)) {
+                    return renderStructuredContent(analysis.content);
+                  }
+                  
+                  // Try to parse the content as JSON if it's a string
+                  if (typeof analysis.content === 'string') {
+                    try {
+                      const parsedContent = JSON.parse(analysis.content);
+                      if (typeof parsedContent === 'object' && parsedContent !== null) {
+                        return renderStructuredContent(parsedContent);
+                      }
+                    } catch (e) {
+                      // Not JSON, continue with regular HTML rendering
+                    }
+                  }
+                  
+                  // Regular content as HTML
+                  return (
+                    <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+                      <div 
+                        className="prose max-w-none text-gray-900"
+                        dangerouslySetInnerHTML={{ 
+                          __html: typeof analysis.content === 'string' 
+                            ? analysis.content 
+                            : 'No content available'
+                        }} 
+                      />
+                    </div>
+                  );
+                } catch (error) {
+                  return (
+                    <div className="bg-red-50 p-6 rounded-lg shadow-md border border-red-200">
+                      <p className="text-red-700">Error displaying content</p>
+                    </div>
+                  );
+                }
+              })()}
+              
+              {/* Download button for analysis */}
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => {
+                    // Create a Blob with the analysis content
+                    const contentString = typeof analysis.content === 'object'
+                      ? JSON.stringify(analysis.content, null, 2)
+                      : analysis.content as string;
+                    
+                    const blob = new Blob([contentString], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    // Create a link and trigger download
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `linkedin-analysis-${analysis.targetUrl.replace(/[^a-zA-Z0-9]/g, '-')}-${new Date().toISOString().split('T')[0]}.txt`;
+                    document.body.appendChild(a);
+                    a.click();
+                    
+                    // Clean up
+                    URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                  }}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-sm transition-colors duration-200"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                  Download
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -311,7 +401,7 @@ const SavedAudienceAnalyses: React.FC<SavedAudienceAnalysesProps> = ({ refreshTr
           color: #374151;
         }
         
-        /* XML-like tags styling */
+        /* XML-like tags styling - improved for better visibility */
         .prose icp,
         .prose firmographic,
         .prose explanation,
@@ -339,15 +429,78 @@ const SavedAudienceAnalyses: React.FC<SavedAudienceAnalysesProps> = ({ refreshTr
         .prose name,
         .prose description,
         .prose high_relevance,
+        .prose medium_relevance,
         .prose low_relevance {
           display: block;
-          margin: 1rem 0;
-          padding: 1rem;
-          border-radius: 0.375rem;
-          border-left: 4px solid #4f46e5;
+          margin: 1.25rem 0;
+          padding: 1.25rem;
+          border-radius: 0.5rem;
+          border-left: 5px solid #4f46e5;
           background-color: #eef2ff;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+          font-size: 1rem;
+          color: #1f2937;
         }
+        
+        /* Add a label to each XML tag for better context */
+        .prose icp::before,
+        .prose firmographic::before,
+        .prose technographic::before,
+        .prose behavioral_psychographic::before,
+        .prose organizational_operational::before,
+        .prose strategic_alignment::before,
+        .prose explanation::before,
+        .prose summary::before,
+        .prose page_analysis::before,
+        .prose business_summary::before,
+        .prose job_title_scoring_analysis::before,
+        .prose scoring_system::before,
+        .prose analysis::before,
+        .prose relevance_categories::before,
+        .prose category1::before,
+        .prose category2::before,
+        .prose category3::before,
+        .prose category4::before,
+        .prose category5::before,
+        .prose category6::before,
+        .prose category7::before,
+        .prose category8::before,
+        .prose category9::before,
+        .prose category10::before,
+        .prose name::before,
+        .prose description::before,
+        .prose high_relevance::before,
+        .prose medium_relevance::before,
+        .prose low_relevance::before {
+          display: block;
+          font-size: 0.75rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: #6366f1;
+          margin-bottom: 0.5rem;
+          content: attr(tagName);
+        }
+        
+        .prose icp::before { content: "ICP"; }
+        .prose firmographic::before { content: "Firmographic Data"; }
+        .prose technographic::before { content: "Technographic Data"; }
+        .prose behavioral_psychographic::before { content: "Behavioral & Psychographic"; }
+        .prose organizational_operational::before { content: "Organizational & Operational"; }
+        .prose strategic_alignment::before { content: "Strategic Alignment"; }
+        .prose explanation::before { content: "Explanation"; }
+        .prose summary::before { content: "Summary"; }
+        .prose page_analysis::before { content: "Page Analysis"; }
+        .prose business_summary::before { content: "Business Summary"; }
+        .prose job_title_scoring_analysis::before { content: "Job Title Scoring Analysis"; }
+        .prose scoring_system::before { content: "Scoring System"; }
+        .prose analysis::before { content: "Analysis"; }
+        .prose relevance_categories::before { content: "Relevance Categories"; }
+        .prose name::before { content: "Name"; }
+        .prose description::before { content: "Description"; }
+        .prose high_relevance::before { content: "High Relevance"; }
+        .prose medium_relevance::before { content: "Medium Relevance"; }
+        .prose low_relevance::before { content: "Low Relevance"; }
         
         .prose firmographic {
           border-left-color: #047857;
@@ -393,9 +546,47 @@ const SavedAudienceAnalyses: React.FC<SavedAudienceAnalysesProps> = ({ refreshTr
           background-color: #ecfdf5;
         }
         
+        .prose medium_relevance {
+          border-left-color: #d97706;
+          background-color: #fffbeb;
+        }
+        
         .prose low_relevance {
           border-left-color: #dc2626;
           background-color: #fef2f2;
+        }
+        
+        /* Add nested styling for better hierarchy */
+        .prose icp > *,
+        .prose firmographic > *,
+        .prose explanation > *,
+        .prose technographic > *,
+        .prose behavioral_psychographic > *,
+        .prose organizational_operational > *,
+        .prose strategic_alignment > *,
+        .prose summary > *,
+        .prose page_analysis > *,
+        .prose business_summary > *,
+        .prose job_title_scoring_analysis > *,
+        .prose scoring_system > *,
+        .prose analysis > *,
+        .prose relevance_categories > *,
+        .prose category1 > *,
+        .prose category2 > *,
+        .prose category3 > *,
+        .prose category4 > *,
+        .prose category5 > *,
+        .prose category6 > *,
+        .prose category7 > *,
+        .prose category8 > *,
+        .prose category9 > *,
+        .prose category10 > *,
+        .prose name > *,
+        .prose description > *,
+        .prose high_relevance > *,
+        .prose medium_relevance > *,
+        .prose low_relevance > * {
+          margin-left: 0.5rem;
         }
       `}</style>
     </div>
