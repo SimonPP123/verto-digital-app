@@ -29,26 +29,6 @@ const renderStructuredContent = (content: any) => {
     return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
   };
 
-  // Helper function to download analysis as text file
-  const downloadAnalysis = (analysisContent: any) => {
-    if (!analysisContent) return;
-    
-    const content = typeof analysisContent === 'string' 
-      ? analysisContent 
-      : JSON.stringify(analysisContent, null, 2);
-    
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const date = new Date().toISOString().split('T')[0];
-    a.href = url;
-    a.download = `linkedin-analysis-${date}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   // Extract content based on HTML structure if it's a string
   const extractSection = (htmlContent: string, tagName: string) => {
     if (!htmlContent.includes(`<${tagName}>`)) return null;
@@ -81,12 +61,6 @@ const renderStructuredContent = (content: any) => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">Analysis Results</h2>
-        <button
-          onClick={() => downloadAnalysis(content)}
-          className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700"
-        >
-          Download Analysis
-        </button>
       </div>
       
       {/* ICP Section */}
@@ -353,29 +327,6 @@ const SavedAudienceAnalyses: React.FC<SavedAudienceAnalysesProps> = ({ refreshTr
                               __html: analysis.content as string || '<p>No content available</p>' 
                             }} 
                           />
-                          <div className="mt-4 text-right">
-                            <button
-                              onClick={() => {
-                                const blob = new Blob([
-                                  typeof analysis.content === 'string' 
-                                    ? analysis.content 
-                                    : JSON.stringify(analysis.content, null, 2)
-                                ], { type: 'text/plain' });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                const date = new Date().toISOString().split('T')[0];
-                                a.href = url;
-                                a.download = `linkedin-analysis-${date}.txt`;
-                                document.body.appendChild(a);
-                                a.click();
-                                document.body.removeChild(a);
-                                URL.revokeObjectURL(url);
-                              }}
-                              className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700"
-                            >
-                              Download Analysis
-                            </button>
-                          </div>
                         </div>
                       );
                     }
