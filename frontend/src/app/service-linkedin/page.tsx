@@ -1,110 +1,120 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import SavedAudienceAnalyses from '../../components/SavedAudienceAnalyses';
-import CollapsibleSection from '../../components/CollapsibleSection';
+import { useState, useEffect } from "react";
+import { useAuth } from "../../contexts/AuthContext";
+import SavedAudienceAnalyses from "../../components/SavedAudienceAnalyses";
+import CollapsibleSection from "../../components/CollapsibleSection";
 
 type Analysis = {
-  content: string | {
-    icp?: string;
-    websiteSummary?: string;
-    scoring?: string;
-    categories?: string;
-  };
+  content:
+    | string
+    | {
+        icp?: string;
+        websiteSummary?: string;
+        scoring?: string;
+        categories?: string;
+      };
   targetUrl: string;
   createdAt: string;
 };
 
 export default function LinkedInServicePage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const [targetUrl, setTargetUrl] = useState('');
+  const [targetUrl, setTargetUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
-  const [analysisStatus, setAnalysisStatus] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
+  const [analysisStatus, setAnalysisStatus] = useState<
+    "idle" | "processing" | "completed" | "error"
+  >("idle");
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [refreshAnalyses, setRefreshAnalyses] = useState(0);
-  const [selectedJobFunctions, setSelectedJobFunctions] = useState<string[]>([]);
+  const [selectedJobFunctions, setSelectedJobFunctions] = useState<string[]>(
+    [],
+  );
   const [jobFunctions, setJobFunctions] = useState<string[]>([]);
   const [isJobFunctionsLoading, setIsJobFunctionsLoading] = useState(false);
   const [jobFunctionError, setJobFunctionError] = useState<string | null>(null);
 
   // Job functions options
   const jobFunctionsOptions = [
-    'Accounting',
-    'Administrative',
-    'Arts and Design',
-    'Business Development',
-    'Community and Social Services',
-    'Consulting',
-    'Education',
-    'Engineering',
-    'Entrepreneurship',
-    'Finance',
-    'Healthcare Services',
-    'Human Resources',
-    'Information Technology',
-    'Legal',
-    'Marketing',
-    'Media and Communication',
-    'Military and Protective Services',
-    'Operations',
-    'Product Management',
-    'Program and Project Management',
-    'Purchasing',
-    'Quality Assurance',
-    'Real Estate',
-    'Research',
-    'Sales',
-    'Customer Success and Support'
+    "Accounting",
+    "Administrative",
+    "Arts and Design",
+    "Business Development",
+    "Community and Social Services",
+    "Consulting",
+    "Education",
+    "Engineering",
+    "Entrepreneurship",
+    "Finance",
+    "Healthcare Services",
+    "Human Resources",
+    "Information Technology",
+    "Legal",
+    "Marketing",
+    "Media and Communication",
+    "Military and Protective Services",
+    "Operations",
+    "Product Management",
+    "Program and Project Management",
+    "Purchasing",
+    "Quality Assurance",
+    "Real Estate",
+    "Research",
+    "Sales",
+    "Customer Success and Support",
   ];
 
   // Poll for results
   useEffect(() => {
-    if (analysisStatus === 'processing') {
+    if (analysisStatus === "processing") {
       const interval = setInterval(async () => {
         try {
-          const response = await fetch('/api/linkedin/audience-analysis/status');
+          const response = await fetch(
+            "/api/linkedin/audience-analysis/status",
+          );
           const data = await response.json();
-          
-          if (data.status === 'completed') {
-            setAnalysisStatus('completed');
-            
+
+          if (data.status === "completed") {
+            setAnalysisStatus("completed");
+
             // Handle the content based on its type
-            if (typeof data.content === 'string') {
+            if (typeof data.content === "string") {
               try {
                 // Try to parse it as JSON if it's a string that looks like JSON
                 const parsedContent = JSON.parse(data.content);
                 setAnalysis({
                   content: parsedContent,
-                  targetUrl: '',
-                  createdAt: new Date().toISOString()
+                  targetUrl: "",
+                  createdAt: new Date().toISOString(),
                 });
               } catch (e) {
                 // If parsing fails, set it as a string
                 setAnalysis({
                   content: data.content,
-                  targetUrl: '',
-                  createdAt: new Date().toISOString()
+                  targetUrl: "",
+                  createdAt: new Date().toISOString(),
                 });
               }
             } else {
               // It's already an object, set it directly
               setAnalysis({
                 content: data.content,
-                targetUrl: '',
-                createdAt: new Date().toISOString()
+                targetUrl: "",
+                createdAt: new Date().toISOString(),
               });
             }
-            
-            setResultMessage("Audience Analysis: Your LinkedIn AI audience analysis has been successfully generated! You can find it below.");
-            setRefreshAnalyses(prev => prev + 1);
+
+            setResultMessage(
+              "Audience Analysis: Your LinkedIn AI audience analysis has been successfully generated! You can find it below.",
+            );
+            setRefreshAnalyses((prev) => prev + 1);
           }
         } catch (error) {
-          console.error('Error checking analysis status:', error);
+          console.error("Error checking analysis status:", error);
         }
       }, 5000);
-      
+
       return () => clearInterval(interval);
     }
   }, [analysisStatus]);
@@ -112,73 +122,83 @@ export default function LinkedInServicePage() {
   // Handle job function selection with a maximum of 13
   const handleJobFunctionToggle = (jobFunction: string) => {
     setJobFunctionError(null);
-    
+
     if (selectedJobFunctions.includes(jobFunction)) {
       // Remove the job function if it's already selected
-      setSelectedJobFunctions(prev => prev.filter(job => job !== jobFunction));
+      setSelectedJobFunctions((prev) =>
+        prev.filter((job) => job !== jobFunction),
+      );
     } else {
       // Add the job function if it's not already selected and we haven't reached the limit
       if (selectedJobFunctions.length >= 13) {
         setJobFunctionError("Maximum 13 job functions can be selected");
         return;
       }
-      setSelectedJobFunctions(prev => [...prev, jobFunction]);
+      setSelectedJobFunctions((prev) => [...prev, jobFunction]);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Get the form element and extract businessPersona value
     const form = e.target as HTMLFormElement;
-    const businessPersonaElement = form.elements.namedItem('businessPersona') as HTMLTextAreaElement;
+    const businessPersonaElement = form.elements.namedItem(
+      "businessPersona",
+    ) as HTMLTextAreaElement;
     const businessPersona = businessPersonaElement?.value;
-    
+
     if (!targetUrl) {
-      alert('Please enter a target URL');
+      alert("Please enter a target URL");
       return;
     }
-    
+
     if (!businessPersona) {
-      alert('Please enter your business persona');
+      alert("Please enter your business persona");
       return;
     }
-    
+
     if (selectedJobFunctions.length === 0) {
-      setJobFunctionError('Please select at least one job function');
+      setJobFunctionError("Please select at least one job function");
       return;
     }
-    
+
     setIsSubmitting(true);
-    setAnalysisStatus('processing');
+    setAnalysisStatus("processing");
     setResultMessage(null);
     setAnalysis(null);
-    
+
     try {
-      const response = await fetch('/api/linkedin/audience-analysis', {
-        method: 'POST',
+      const response = await fetch("/api/linkedin/audience-analysis", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           websiteUrl: targetUrl,
           businessPersona,
-          jobFunctions: selectedJobFunctions
+          jobFunctions: selectedJobFunctions,
         }),
       });
 
       const data = await response.json();
-      
+
       if (response.ok) {
-        setResultMessage('Your LinkedIn AI audience analysis is being generated. This may take a few minutes.');
+        setResultMessage(
+          "Your LinkedIn AI audience analysis is being generated. This may take a few minutes.",
+        );
       } else {
-        setAnalysisStatus('error');
-        setResultMessage(`Error: ${data.message || 'Failed to submit audience analysis request'}`);
+        setAnalysisStatus("error");
+        setResultMessage(
+          `Error: ${data.message || "Failed to submit audience analysis request"}`,
+        );
       }
     } catch (error) {
-      console.error('Error submitting audience analysis:', error);
-      setAnalysisStatus('error');
-      setResultMessage('Error: Failed to connect to the server. Please try again later.');
+      console.error("Error submitting audience analysis:", error);
+      setAnalysisStatus("error");
+      setResultMessage(
+        "Error: Failed to connect to the server. Please try again later.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -190,13 +210,16 @@ export default function LinkedInServicePage() {
 
     // Helper function to process HTML content safely (minimal processing)
     const processHtmlContent = (html: string) => {
-      return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+      return html.replace(
+        /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+        "",
+      );
     };
 
     // Extract content based on HTML structure if it's a string
     const extractSection = (htmlContent: string, tagName: string) => {
       if (!htmlContent.includes(`<${tagName}>`)) return null;
-      const regex = new RegExp(`<${tagName}>(.*?)<\/${tagName}>`, 's');
+      const regex = new RegExp(`<${tagName}>(.*?)<\/${tagName}>`, "s");
       const match = htmlContent.match(regex);
       return match ? match[1] : null;
     };
@@ -207,18 +230,20 @@ export default function LinkedInServicePage() {
     let scoringContent = null;
     let categoriesContent = null;
 
-    if (typeof content === 'string') {
+    if (typeof content === "string") {
       // Parse sections from HTML string
-      icpContent = extractSection(content, 'icp');
-      websiteSummaryContent = extractSection(content, 'business_summary');
-      scoringContent = extractSection(content, 'scoring_system');
-      categoriesContent = extractSection(content, 'relevance_categories');
+      icpContent = extractSection(content, "icp");
+      websiteSummaryContent = extractSection(content, "business_summary");
+      scoringContent = extractSection(content, "scoring_system");
+      categoriesContent = extractSection(content, "relevance_categories");
     } else {
       // Handle object format
       icpContent = content.icp || null;
-      websiteSummaryContent = content.websiteSummary || content.business_summary || null;
+      websiteSummaryContent =
+        content.websiteSummary || content.business_summary || null;
       scoringContent = content.scoring || content.scoring_system || null;
-      categoriesContent = content.categories || content.relevance_categories || null;
+      categoriesContent =
+        content.categories || content.relevance_categories || null;
     }
 
     return (
@@ -226,16 +251,18 @@ export default function LinkedInServicePage() {
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-900">Analysis Results</h2>
         </div>
-        
+
         {/* ICP Section */}
         {icpContent && (
           <div className="mb-8 border-l-4 border-indigo-500 pl-4">
-            <h3 className="text-xl font-bold text-indigo-900 mb-4">Ideal Customer Profile (ICP)</h3>
-            <div 
-              className="prose max-w-none" 
-              dangerouslySetInnerHTML={{ 
-                __html: processHtmlContent(icpContent) 
-              }} 
+            <h3 className="text-xl font-bold text-indigo-900 mb-4">
+              Ideal Customer Profile (ICP)
+            </h3>
+            <div
+              className="prose max-w-none"
+              dangerouslySetInnerHTML={{
+                __html: processHtmlContent(icpContent),
+              }}
             />
           </div>
         )}
@@ -243,12 +270,14 @@ export default function LinkedInServicePage() {
         {/* Website Summary Section */}
         {websiteSummaryContent && (
           <div className="mb-8 border-l-4 border-emerald-500 pl-4">
-            <h3 className="text-xl font-bold text-emerald-800 mb-4">Website Summary</h3>
-            <div 
-              className="prose max-w-none" 
-              dangerouslySetInnerHTML={{ 
-                __html: processHtmlContent(websiteSummaryContent) 
-              }} 
+            <h3 className="text-xl font-bold text-emerald-800 mb-4">
+              Website Summary
+            </h3>
+            <div
+              className="prose max-w-none"
+              dangerouslySetInnerHTML={{
+                __html: processHtmlContent(websiteSummaryContent),
+              }}
             />
           </div>
         )}
@@ -257,11 +286,11 @@ export default function LinkedInServicePage() {
         {scoringContent && (
           <div className="mb-8 border-l-4 border-amber-500 pl-4">
             <h3 className="text-xl font-bold text-amber-800 mb-4">Scoring</h3>
-            <div 
-              className="prose max-w-none" 
-              dangerouslySetInnerHTML={{ 
-                __html: processHtmlContent(scoringContent) 
-              }} 
+            <div
+              className="prose max-w-none"
+              dangerouslySetInnerHTML={{
+                __html: processHtmlContent(scoringContent),
+              }}
             />
           </div>
         )}
@@ -269,12 +298,14 @@ export default function LinkedInServicePage() {
         {/* Categories Section */}
         {categoriesContent && (
           <div className="mb-8 border-l-4 border-purple-500 pl-4">
-            <h3 className="text-xl font-bold text-purple-800 mb-4">Categories</h3>
-            <div 
-              className="prose max-w-none" 
-              dangerouslySetInnerHTML={{ 
-                __html: processHtmlContent(categoriesContent) 
-              }} 
+            <h3 className="text-xl font-bold text-purple-800 mb-4">
+              Categories
+            </h3>
+            <div
+              className="prose max-w-none"
+              dangerouslySetInnerHTML={{
+                __html: processHtmlContent(categoriesContent),
+              }}
             />
           </div>
         )}
@@ -294,8 +325,12 @@ export default function LinkedInServicePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-indigo-50 to-white">
         <div className="text-center bg-white p-8 rounded-xl shadow-lg border border-indigo-100">
-          <h1 className="text-2xl font-bold text-indigo-900 mb-4">Access Denied</h1>
-          <p className="text-indigo-700">Please log in to access this service.</p>
+          <h1 className="text-2xl font-bold text-indigo-900 mb-4">
+            Access Denied
+          </h1>
+          <p className="text-indigo-700">
+            Please log in to access this service.
+          </p>
         </div>
       </div>
     );
@@ -303,21 +338,47 @@ export default function LinkedInServicePage() {
 
   return (
     <div className="max-w-4xl mx-auto py-12 px-4 bg-white rounded-xl shadow-lg">
-      <h1 className="text-3xl font-bold text-indigo-900 mb-8 border-b-2 border-indigo-100 pb-4">LinkedIn AI Audience Analysis</h1>
-      
+      <h1 className="text-3xl font-bold text-indigo-900 mb-8 border-b-2 border-indigo-100 pb-4">
+        LinkedIn AI Audience Analysis
+      </h1>
+
+      <div className="mb-10 aspect-video w-full max-w-4xl mx-auto rounded-lg overflow-hidden shadow-lg border border-gray-200">
+        <iframe
+          src="https://www.loom.com/embed/12236df186cd46c29556825969014b79?sid=6244be81-12d7-4cba-a0a3-bed2e7cadcf7"
+          frameBorder="0"
+          allowFullScreen
+          className="w-full h-full"
+        ></iframe>
+      </div>
+
       <div className="mb-8">
         <div className="bg-gradient-to-r from-indigo-50 to-white p-6 rounded-lg border border-indigo-200 mb-8 shadow-md">
-          <h2 className="text-lg font-semibold text-indigo-900 mb-4">How the LinkedIn AI Audience Analysis works:</h2>
+          <h2 className="text-lg font-semibold text-indigo-900 mb-4">
+            How the LinkedIn AI Audience Analysis works:
+          </h2>
           <ol className="list-decimal list-inside space-y-2 text-indigo-700 ml-4">
-            <li>Enter your website URL, business persona, and select relevant job functions</li>
+            <li>
+              Enter your website URL, business persona, and select relevant job
+              functions
+            </li>
             <li>Our AI analyzes your website and business information</li>
-            <li>The system generates a comprehensive audience analysis for LinkedIn targeting</li>
-            <li>Results in the interface include ICP details, website summary, job title scoring, and relevance categories</li>
-            <li>The scored audience is in google sheets in the google drive folder</li>
+            <li>
+              The system generates a comprehensive audience analysis for
+              LinkedIn targeting
+            </li>
+            <li>
+              Results in the interface include ICP details, website summary, job
+              title scoring, and relevance categories
+            </li>
+            <li>
+              The scored audience is in google sheets in the google drive folder
+            </li>
           </ol>
           <div className="mt-6 flex items-center">
-            <span className="text-indigo-800 mr-3 font-medium">Access all audience sheets with audience scoring here:</span>
-            <a 
+            <span className="text-indigo-800 mr-3 font-medium">
+              Access all audience sheets with audience scoring here:
+            </span>
+            <a
               href="https://drive.google.com/drive/u/0/folders/1qLEEcY658Yj1p409NdrG9JACKATpVTin"
               target="_blank"
               rel="noopener noreferrer"
@@ -329,63 +390,90 @@ export default function LinkedInServicePage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-8 bg-white p-8 rounded-xl shadow-lg border border-gray-200">
-        <h2 className="text-2xl font-bold text-indigo-900 mb-6 pb-3 border-b border-indigo-100">Generate New Analysis</h2>
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-8 bg-white p-8 rounded-xl shadow-lg border border-gray-200"
+      >
+        <h2 className="text-2xl font-bold text-indigo-900 mb-6 pb-3 border-b border-indigo-100">
+          Generate New Analysis
+        </h2>
 
         <div className="space-y-6">
-        <div>
-            <label htmlFor="websiteUrl" className="block text-base font-medium text-indigo-900 mb-2">
+          <div>
+            <label
+              htmlFor="websiteUrl"
+              className="block text-base font-medium text-indigo-900 mb-2"
+            >
               Website URL <span className="text-red-500">*</span>
-          </label>
+            </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 text-indigo-400"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z"
+                    clipRule="evenodd"
+                  />
                 </svg>
               </div>
-          <input
-            type="url"
+              <input
+                type="url"
                 name="websiteUrl"
                 id="websiteUrl"
-            required
+                required
                 placeholder="https://example.com/"
                 className="block w-full pl-10 rounded-lg border-indigo-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-gray-900 py-3 px-4"
                 value={targetUrl}
                 onChange={(e) => setTargetUrl(e.target.value)}
-          />
-        </div>
-            <p className="mt-1 text-sm text-indigo-600">Enter the full URL of the website you want to analyze</p>
-        </div>
+              />
+            </div>
+            <p className="mt-1 text-sm text-indigo-600">
+              Enter the full URL of the website you want to analyze
+            </p>
+          </div>
 
-        <div>
-            <label htmlFor="businessPersona" className="block text-base font-medium text-indigo-900 mb-2">
+          <div>
+            <label
+              htmlFor="businessPersona"
+              className="block text-base font-medium text-indigo-900 mb-2"
+            >
               ICP / Business Persona <span className="text-red-500">*</span>
-          </label>
-          <textarea
+            </label>
+            <textarea
               name="businessPersona"
               id="businessPersona"
               rows={4}
-            required
+              required
               placeholder="Describe your business, products/services, and target audience..."
               className="block w-full rounded-lg border-indigo-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-gray-900 py-3 px-4"
-          />
-            <p className="mt-1 text-sm text-indigo-600">Provide details about your business and ideal customer profile</p>
-        </div>
+            />
+            <p className="mt-1 text-sm text-indigo-600">
+              Provide details about your business and ideal customer profile
+            </p>
+          </div>
 
-        <div>
+          <div>
             <label className="block text-base font-medium text-indigo-900 mb-2">
-              Job Functions <span className="text-red-500">*</span> <span className="text-sm font-normal text-indigo-600">(Select up to 13)</span>
-          </label>
+              Job Functions <span className="text-red-500">*</span>{" "}
+              <span className="text-sm font-normal text-indigo-600">
+                (Select up to 13)
+              </span>
+            </label>
             <div className="mt-2 flex flex-wrap gap-2 max-h-60 overflow-y-auto p-2 border border-indigo-200 rounded-lg bg-indigo-50">
-              {jobFunctionsOptions.map(job => (
+              {jobFunctionsOptions.map((job) => (
                 <button
                   key={job}
                   type="button"
                   onClick={() => handleJobFunctionToggle(job)}
                   className={`px-3 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
                     selectedJobFunctions.includes(job)
-                      ? 'bg-indigo-600 text-white shadow-md transform scale-105'
-                      : 'bg-white text-indigo-800 hover:bg-indigo-200 border border-indigo-200'
+                      ? "bg-indigo-600 text-white shadow-md transform scale-105"
+                      : "bg-white text-indigo-800 hover:bg-indigo-200 border border-indigo-200"
                   }`}
                 >
                   {job}
@@ -394,8 +482,17 @@ export default function LinkedInServicePage() {
             </div>
             {jobFunctionError && (
               <p className="mt-2 text-sm text-red-600 flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-4 w-4 mr-1"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                    clipRule="evenodd"
+                  />
                 </svg>
                 {jobFunctionError}
               </p>
@@ -404,7 +501,10 @@ export default function LinkedInServicePage() {
               <div className="mt-4">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-indigo-700 font-medium">
-                    Selected: <span className="font-bold">{selectedJobFunctions.length}/13</span>
+                    Selected:{" "}
+                    <span className="font-bold">
+                      {selectedJobFunctions.length}/13
+                    </span>
                   </p>
                   {selectedJobFunctions.length > 0 && (
                     <button
@@ -418,9 +518,9 @@ export default function LinkedInServicePage() {
                 </div>
                 <div className="mt-2 p-3 bg-white rounded-lg border border-indigo-200">
                   <div className="flex flex-wrap gap-2">
-                    {selectedJobFunctions.map(job => (
-                      <span 
-                        key={job} 
+                    {selectedJobFunctions.map((job) => (
+                      <span
+                        key={job}
                         className="inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-indigo-100 text-indigo-800"
                       >
                         {job}
@@ -429,8 +529,17 @@ export default function LinkedInServicePage() {
                           onClick={() => handleJobFunctionToggle(job)}
                           className="ml-1.5 text-indigo-600 hover:text-indigo-900"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-4 w-4"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                              clipRule="evenodd"
+                            />
                           </svg>
                         </button>
                       </span>
@@ -443,110 +552,199 @@ export default function LinkedInServicePage() {
         </div>
 
         <div className="pt-6 border-t border-gray-200">
-        <button
-          type="submit"
+          <button
+            type="submit"
             disabled={isSubmitting}
             className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-lg text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 ${
-              isSubmitting ? 'opacity-70 cursor-not-allowed' : 'transform hover:scale-[1.02]'
+              isSubmitting
+                ? "opacity-70 cursor-not-allowed"
+                : "transform hover:scale-[1.02]"
             }`}
           >
             {isSubmitting ? (
               <>
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <svg
+                  className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
                 </svg>
                 Processing...
               </>
-            ) : 'Generate Audience Analysis'}
-        </button>
+            ) : (
+              "Generate Audience Analysis"
+            )}
+          </button>
         </div>
       </form>
 
       {resultMessage && (
         <div className={`mt-8 rounded-xl shadow-lg overflow-hidden`}>
-          <div className={`p-1 ${
-            analysisStatus === 'error' ? 'bg-gradient-to-r from-red-500 to-red-600' : 
-            analysisStatus === 'processing' ? 'bg-gradient-to-r from-amber-400 to-amber-500' : 
-            'bg-gradient-to-r from-emerald-400 to-emerald-500'
-          }`}>
+          <div
+            className={`p-1 ${
+              analysisStatus === "error"
+                ? "bg-gradient-to-r from-red-500 to-red-600"
+                : analysisStatus === "processing"
+                  ? "bg-gradient-to-r from-amber-400 to-amber-500"
+                  : "bg-gradient-to-r from-emerald-400 to-emerald-500"
+            }`}
+          >
             <div className="bg-white p-6 rounded-lg">
               <div className="flex items-start">
-                <div className={`flex-shrink-0 p-2 rounded-full ${
-                  analysisStatus === 'error' ? 'bg-red-100 text-red-600' : 
-                  analysisStatus === 'processing' ? 'bg-amber-100 text-amber-600' : 
-                  'bg-emerald-100 text-emerald-600'
-                }`}>
-                  {analysisStatus === 'error' ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <div
+                  className={`flex-shrink-0 p-2 rounded-full ${
+                    analysisStatus === "error"
+                      ? "bg-red-100 text-red-600"
+                      : analysisStatus === "processing"
+                        ? "bg-amber-100 text-amber-600"
+                        : "bg-emerald-100 text-emerald-600"
+                  }`}
+                >
+                  {analysisStatus === "error" ? (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-6 w-6"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
                     </svg>
-                  ) : analysisStatus === 'processing' ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  ) : analysisStatus === "processing" ? (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-6 w-6"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
                     </svg>
                   ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-6 w-6"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
                     </svg>
                   )}
                 </div>
                 <div className="ml-4 flex-1">
-                  <h2 className={`text-xl font-bold mb-2 ${
-                    analysisStatus === 'error' ? 'text-red-800' : 
-                    analysisStatus === 'processing' ? 'text-amber-800' : 
-                    'text-emerald-800'
-                  }`}>
-                    {analysisStatus === 'error' ? 'Error' : 
-                    analysisStatus === 'processing' ? 'Processing' : 
-                    'Success'}
+                  <h2
+                    className={`text-xl font-bold mb-2 ${
+                      analysisStatus === "error"
+                        ? "text-red-800"
+                        : analysisStatus === "processing"
+                          ? "text-amber-800"
+                          : "text-emerald-800"
+                    }`}
+                  >
+                    {analysisStatus === "error"
+                      ? "Error"
+                      : analysisStatus === "processing"
+                        ? "Processing"
+                        : "Success"}
                   </h2>
-          <div className="prose max-w-none">
-                    {resultMessage.split('\n').map((line, index) => {
+                  <div className="prose max-w-none">
+                    {resultMessage.split("\n").map((line, index) => {
                       // Check if the line contains a Google Drive link
-                      if (line.includes('https://drive.google.com')) {
+                      if (line.includes("https://drive.google.com")) {
                         // Don't display the link in the text, just show the message without it
-                        const beforeLink = line.split('https://')[0];
-                        
+                        const beforeLink = line.split("https://")[0];
+
                         return (
-                          <p key={index} className={`mb-3 ${
-                            analysisStatus === 'error' ? 'text-red-700' : 
-                            analysisStatus === 'processing' ? 'text-amber-700' : 
-                            line.startsWith('Audience Analysis:') ? 'text-emerald-900 font-semibold' : 'text-emerald-700'
-                          }`}>
+                          <p
+                            key={index}
+                            className={`mb-3 ${
+                              analysisStatus === "error"
+                                ? "text-red-700"
+                                : analysisStatus === "processing"
+                                  ? "text-amber-700"
+                                  : line.startsWith("Audience Analysis:")
+                                    ? "text-emerald-900 font-semibold"
+                                    : "text-emerald-700"
+                            }`}
+                          >
                             {beforeLink}
                           </p>
                         );
                       }
-                      
+
                       return (
-                        <p key={index} className={`mb-3 ${
-                          analysisStatus === 'error' ? 'text-red-700' : 
-                          analysisStatus === 'processing' ? 'text-amber-700' : 
-                          line.startsWith('Audience Analysis:') ? 'text-emerald-900 font-semibold' : 'text-emerald-700'
-                        }`}>
+                        <p
+                          key={index}
+                          className={`mb-3 ${
+                            analysisStatus === "error"
+                              ? "text-red-700"
+                              : analysisStatus === "processing"
+                                ? "text-amber-700"
+                                : line.startsWith("Audience Analysis:")
+                                  ? "text-emerald-900 font-semibold"
+                                  : "text-emerald-700"
+                          }`}
+                        >
                           {line}
                         </p>
                       );
                     })}
                   </div>
-                  
-                  {analysisStatus === 'processing' && (
+
+                  {analysisStatus === "processing" && (
                     <div className="flex items-center mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-amber-700 mr-3"></div>
-                      <p className="text-amber-700">This may take a few minutes. You'll be notified when the analysis is complete.</p>
+                      <p className="text-amber-700">
+                        This may take a few minutes. You'll be notified when the
+                        analysis is complete.
+                      </p>
                     </div>
                   )}
-                  
-                  {analysisStatus === 'completed' && (
+
+                  {analysisStatus === "completed" && (
                     <div className="mt-4 flex flex-wrap gap-3 relative">
-                      <a 
+                      <a
                         href="https://drive.google.com/drive/u/0/folders/1qLEEcY658Yj1p409NdrG9JACKATpVTin"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-sm transition-colors duration-200"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-5 w-5 mr-2"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
                           <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
                           <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
                         </svg>
@@ -566,12 +764,15 @@ export default function LinkedInServicePage() {
           {(() => {
             try {
               // First check if the content is already an object
-              if (typeof analysis.content === 'object' && analysis.content !== null) {
+              if (
+                typeof analysis.content === "object" &&
+                analysis.content !== null
+              ) {
                 return renderStructuredContent(analysis.content);
               }
-              
+
               // If it's a string, try to parse as JSON
-              if (typeof analysis.content === 'string') {
+              if (typeof analysis.content === "string") {
                 try {
                   const parsedContent = JSON.parse(analysis.content);
                   return renderStructuredContent(parsedContent);
@@ -580,19 +781,22 @@ export default function LinkedInServicePage() {
                   return (
                     <div>
                       <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-bold text-gray-900">Analysis Results</h2>
+                        <h2 className="text-2xl font-bold text-gray-900">
+                          Analysis Results
+                        </h2>
                       </div>
-                      <div 
-                        className="prose max-w-none" 
-                        dangerouslySetInnerHTML={{ 
-                          __html: analysis.content || '<p>No content available</p>' 
-                        }} 
+                      <div
+                        className="prose max-w-none"
+                        dangerouslySetInnerHTML={{
+                          __html:
+                            analysis.content || "<p>No content available</p>",
+                        }}
                       />
                     </div>
                   );
                 }
               }
-              
+
               // Fallback for any other type
               return <div>No readable content available</div>;
             } catch (e) {
@@ -606,7 +810,7 @@ export default function LinkedInServicePage() {
       <CollapsibleSection title="Saved Audience Analyses" defaultOpen={true}>
         <SavedAudienceAnalyses refreshTrigger={refreshAnalyses} />
       </CollapsibleSection>
-      
+
       <style jsx global>{`
         .prose {
           max-width: none;
@@ -645,7 +849,7 @@ export default function LinkedInServicePage() {
           margin-bottom: 0.5rem;
           color: #374151;
         }
-        
+
         /* XML-like tags styling - improved for better visibility */
         .prose icp,
         .prose firmographic,
@@ -712,7 +916,7 @@ export default function LinkedInServicePage() {
         .audience-category ul {
           margin-top: 0.75rem;
         }
-        
+
         /* Add a label to each XML tag for better context */
         .prose icp::before,
         .prose firmographic::before,
@@ -752,20 +956,44 @@ export default function LinkedInServicePage() {
           margin-bottom: 0.5rem;
           content: attr(tagName);
         }
-        
-        .prose icp::before { content: "ICP"; }
-        .prose firmographic::before { content: "Firmographic Data"; }
-        .prose technographic::before { content: "Technographic Data"; }
-        .prose behavioral_psychographic::before { content: "Behavioral & Psychographic"; }
-        .prose organizational_operational::before { content: "Organizational & Operational"; }
-        .prose strategic_alignment::before { content: "Strategic Alignment"; }
-        .prose explanation::before { content: "Explanation"; }
-        .prose summary::before { content: "Summary"; }
-        .prose page_analysis::before { content: "Page Analysis"; }
-        .prose business_summary::before { content: "Business Summary"; }
-        .prose job_title_scoring_analysis::before { content: "Job Title Scoring Analysis"; }
-        .prose scoring_system::before { content: "Scoring System"; }
-        
+
+        .prose icp::before {
+          content: "ICP";
+        }
+        .prose firmographic::before {
+          content: "Firmographic Data";
+        }
+        .prose technographic::before {
+          content: "Technographic Data";
+        }
+        .prose behavioral_psychographic::before {
+          content: "Behavioral & Psychographic";
+        }
+        .prose organizational_operational::before {
+          content: "Organizational & Operational";
+        }
+        .prose strategic_alignment::before {
+          content: "Strategic Alignment";
+        }
+        .prose explanation::before {
+          content: "Explanation";
+        }
+        .prose summary::before {
+          content: "Summary";
+        }
+        .prose page_analysis::before {
+          content: "Page Analysis";
+        }
+        .prose business_summary::before {
+          content: "Business Summary";
+        }
+        .prose job_title_scoring_analysis::before {
+          content: "Job Title Scoring Analysis";
+        }
+        .prose scoring_system::before {
+          content: "Scoring System";
+        }
+
         /* Enhanced styling for scoring system to ensure all nested content displays properly */
         .prose scoring_system h3,
         .prose .scoring_system h3 {
@@ -775,7 +1003,7 @@ export default function LinkedInServicePage() {
           margin-top: 1.25rem;
           margin-bottom: 0.75rem;
         }
-        
+
         .prose scoring_system h4,
         .prose .scoring_system h4 {
           font-size: 1.125rem;
@@ -784,25 +1012,25 @@ export default function LinkedInServicePage() {
           margin-top: 1rem;
           margin-bottom: 0.5rem;
         }
-        
+
         .prose scoring_system ul,
         .prose .scoring_system ul {
           list-style-type: disc;
           margin-left: 1.5rem;
           margin-bottom: 1rem;
         }
-        
+
         .prose scoring_system li,
         .prose .scoring_system li {
           margin-bottom: 0.5rem;
         }
-        
+
         .prose scoring_system p,
         .prose .scoring_system p {
           margin-bottom: 0.75rem;
           line-height: 1.6;
         }
-        
+
         /* Special styling for the scoring levels */
         .prose scoring_system strong,
         .prose .scoring_system strong {
@@ -812,4 +1040,4 @@ export default function LinkedInServicePage() {
       `}</style>
     </div>
   );
-} 
+}
