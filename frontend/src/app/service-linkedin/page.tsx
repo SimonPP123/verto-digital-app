@@ -97,7 +97,7 @@ export default function LinkedInServicePage() {
               });
             }
             
-            setResultMessage("Audience Analysis: Your LinkedIn AI audience analysis has been successfully generated! You can find it below and in the Google Drive folder: https://drive.google.com/drive/u/0/folders/1qLEEcY658Yj1p409NdrG9JACKATpVTin");
+            setResultMessage("Audience Analysis: Your LinkedIn AI audience analysis has been successfully generated! You can find it below.");
             setRefreshAnalyses(prev => prev + 1);
           }
         } catch (error) {
@@ -195,20 +195,41 @@ export default function LinkedInServicePage() {
       return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
     };
 
-    // Helper function to download analysis as text file
-    const downloadAnalysis = () => {
+    // Helper function to download analysis
+    const downloadAnalysis = (format: 'txt' | 'pdf' | 'docx' = 'txt') => {
       if (!analysis?.content) return;
       
       const content = typeof analysis.content === 'string' 
         ? analysis.content 
         : JSON.stringify(analysis.content, null, 2);
       
-      const blob = new Blob([content], { type: 'text/plain' });
+      // For real PDF and DOCX functionality, you would need a server-side conversion
+      // Here we're using the same content but setting different MIME types
+      let mimeType = 'text/plain';
+      let extension = 'txt';
+      
+      if (format === 'pdf') {
+        mimeType = 'application/pdf';
+        extension = 'pdf';
+        
+        // For a real implementation, you would need to convert the content to PDF format
+        // This would typically involve a server API call to a conversion service
+        alert('Note: In a production environment, this would generate a properly formatted PDF. Currently, this downloads a placeholder .pdf file.');
+      } else if (format === 'docx') {
+        mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        extension = 'docx';
+        
+        // For a real implementation, you would need to convert the content to DOCX format
+        // This would typically involve a server API call to a conversion service
+        alert('Note: In a production environment, this would generate a properly formatted DOCX file. Currently, this downloads a placeholder .docx file.');
+      }
+      
+      const blob = new Blob([content], { type: mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       const date = new Date().toISOString().split('T')[0];
       a.href = url;
-      a.download = `linkedin-analysis-${date}.txt`;
+      a.download = `linkedin-analysis-${date}.${extension}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -247,12 +268,63 @@ export default function LinkedInServicePage() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-900">Analysis Results</h2>
-          <button
-            onClick={downloadAnalysis}
-            className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700"
-          >
-            Download Analysis
-          </button>
+          <div className="relative inline-block text-left">
+            <div>
+              <button
+                type="button"
+                className="inline-flex justify-center items-center w-full px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                id="download-options-menu"
+                aria-haspopup="true"
+                aria-expanded="true"
+                onClick={() => document.getElementById('download-dropdown')?.classList.toggle('hidden')}
+              >
+                Download Analysis
+                <svg className="-mr-1 ml-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+            <div 
+              id="download-dropdown" 
+              className="hidden origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 divide-y divide-gray-100 focus:outline-none z-10" 
+              role="menu" 
+              aria-orientation="vertical" 
+              aria-labelledby="download-options-menu"
+            >
+              <div className="py-1" role="none">
+                <button
+                  onClick={() => downloadAnalysis('txt')}
+                  className="group flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-900 w-full text-left"
+                  role="menuitem"
+                >
+                  <svg className="mr-3 h-5 w-5 text-gray-400 group-hover:text-indigo-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                  </svg>
+                  Download as TXT
+                </button>
+                <button
+                  onClick={() => downloadAnalysis('pdf')}
+                  className="group flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-900 w-full text-left"
+                  role="menuitem"
+                >
+                  <svg className="mr-3 h-5 w-5 text-gray-400 group-hover:text-indigo-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                  </svg>
+                  Download as PDF
+                </button>
+                <button
+                  onClick={() => downloadAnalysis('docx')}
+                  className="group flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-900 w-full text-left"
+                  role="menuitem"
+                >
+                  <svg className="mr-3 h-5 w-5 text-gray-400 group-hover:text-indigo-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                  </svg>
+                  Download as DOCX
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
         
         {/* ICP Section */}
@@ -334,10 +406,6 @@ export default function LinkedInServicePage() {
       <h1 className="text-3xl font-bold text-indigo-900 mb-8 border-b-2 border-indigo-100 pb-4">LinkedIn AI Audience Analysis</h1>
       
       <div className="mb-8">
-        <p className="text-indigo-800 mb-6 text-lg">
-          Enter your website URL, business persona, and select job functions to generate a comprehensive LinkedIn audience analysis.
-        </p>
-        
         <div className="bg-gradient-to-r from-indigo-50 to-white p-6 rounded-lg border border-indigo-200 mb-8 shadow-md">
           <h2 className="text-lg font-semibold text-indigo-900 mb-4">How the LinkedIn AI Audience Analysis works:</h2>
           <ol className="list-decimal list-inside space-y-2 text-indigo-700 ml-4">
@@ -345,7 +413,6 @@ export default function LinkedInServicePage() {
             <li>Our AI analyzes your website and business information</li>
             <li>The system generates a comprehensive audience analysis for LinkedIn targeting</li>
             <li>Results include ICP details, website summary, job title scoring, and relevance categories</li>
-            <li>Your analysis is saved and can be accessed anytime</li>
           </ol>
           <div className="mt-6 flex items-center">
             <span className="text-indigo-800 mr-3 font-medium">Access all audience analyses here:</span>
@@ -537,8 +604,8 @@ export default function LinkedInServicePage() {
                     {resultMessage.split('\n').map((line, index) => {
                       // Check if the line contains a Google Drive link
                       if (line.includes('https://drive.google.com')) {
+                        // Don't display the link in the text, just show the message without it
                         const beforeLink = line.split('https://')[0];
-                        const link = 'https://' + line.split('https://')[1];
                         
                         return (
                           <p key={index} className={`mb-3 ${
@@ -547,18 +614,6 @@ export default function LinkedInServicePage() {
                             line.startsWith('Audience Analysis:') ? 'text-emerald-900 font-semibold' : 'text-emerald-700'
                           }`}>
                             {beforeLink}
-                            <a 
-                              href={link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-medium hover:underline"
-                            >
-                              Google Drive Folder
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
-                                <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
-                                <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
-                              </svg>
-                            </a>
                           </p>
                         );
                       }
@@ -583,7 +638,7 @@ export default function LinkedInServicePage() {
                   )}
                   
                   {analysisStatus === 'completed' && (
-                    <div className="mt-4 flex flex-wrap gap-3">
+                    <div className="mt-4 flex flex-wrap gap-3 relative">
                       <a 
                         href="https://drive.google.com/drive/u/0/folders/1qLEEcY658Yj1p409NdrG9JACKATpVTin"
                         target="_blank"
@@ -596,21 +651,104 @@ export default function LinkedInServicePage() {
                         </svg>
                         Open in Google Drive
                       </a>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          window.scrollTo({
-                            top: document.getElementById('analysis-results')?.offsetTop || 0,
-                            behavior: 'smooth'
-                          });
-                        }}
-                        className="inline-flex items-center px-4 py-2 border border-indigo-300 text-sm font-medium rounded-md text-indigo-700 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-sm transition-colors duration-200"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                        View Results Below
-                      </button>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            document.getElementById('success-download-dropdown')?.classList.toggle('hidden');
+                          }}
+                          className="inline-flex items-center px-4 py-2 border border-indigo-300 text-sm font-medium rounded-md text-indigo-700 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-sm transition-colors duration-200"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                          Download Analysis
+                          <svg className="ml-1 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                        <div 
+                          id="success-download-dropdown" 
+                          className="hidden absolute mt-12 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 divide-y divide-gray-100 focus:outline-none z-10" 
+                        >
+                          <div className="py-1" role="none">
+                            <button
+                              onClick={() => {
+                                // Create a simple downloadAnalysis function here
+                                const content = typeof analysis?.content === 'string' 
+                                  ? analysis.content 
+                                  : JSON.stringify(analysis?.content, null, 2);
+                                
+                                if (!content) return;
+                                
+                                const blob = new Blob([content], { type: 'text/plain' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                const date = new Date().toISOString().split('T')[0];
+                                a.href = url;
+                                a.download = `linkedin-analysis-${date}.txt`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                              }}
+                              className="group flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-900 w-full text-left"
+                            >
+                              Download as TXT
+                            </button>
+                            <button
+                              onClick={() => {
+                                // PDF version
+                                const content = typeof analysis?.content === 'string' 
+                                  ? analysis.content 
+                                  : JSON.stringify(analysis?.content, null, 2);
+                                
+                                if (!content) return;
+                                
+                                alert('Note: In a production environment, this would generate a properly formatted PDF. Currently, this downloads a placeholder .pdf file.');
+                                const blob = new Blob([content], { type: 'application/pdf' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                const date = new Date().toISOString().split('T')[0];
+                                a.href = url;
+                                a.download = `linkedin-analysis-${date}.pdf`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                              }}
+                              className="group flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-900 w-full text-left"
+                            >
+                              Download as PDF
+                            </button>
+                            <button
+                              onClick={() => {
+                                // DOCX version
+                                const content = typeof analysis?.content === 'string' 
+                                  ? analysis.content 
+                                  : JSON.stringify(analysis?.content, null, 2);
+                                
+                                if (!content) return;
+                                
+                                alert('Note: In a production environment, this would generate a properly formatted DOCX file. Currently, this downloads a placeholder .docx file.');
+                                const blob = new Blob([content], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                const date = new Date().toISOString().split('T')[0];
+                                a.href = url;
+                                a.download = `linkedin-analysis-${date}.docx`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                              }}
+                              className="group flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-900 w-full text-left"
+                            >
+                              Download as DOCX
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
