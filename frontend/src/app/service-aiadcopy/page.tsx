@@ -39,6 +39,7 @@ interface Template {
   _id: string;
   name: string;
   campaignName: string;
+  brandName: string;
   landingPageContent: string;
   landingPageUrl: string;
   additionalInfo: string;
@@ -87,6 +88,7 @@ const AdCopyServicePage: React.FC = () => {
   const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>([]);
   const [selectedSavedId, setSelectedSavedId] = useState<string>();
   const [campaignName, setCampaignName] = useState('');
+  const [brandName, setBrandName] = useState('');
   const [landingPageContent, setLandingPageContent] = useState('');
   const [landingPageUrl, setLandingPageUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -154,6 +156,7 @@ const AdCopyServicePage: React.FC = () => {
         body: JSON.stringify({
           inputs: {
             campaign_name: formData.get('campaign_name'),
+            brand_name: formData.get('brand_name'),
             input_channels: 'Google, Linkedin, Email, Reddit, Twitter, Facebook',
             landing_page_content: formData.get('landing_page_content'),
             content_material: formData.get('content_material'),
@@ -255,6 +258,7 @@ const AdCopyServicePage: React.FC = () => {
       
       // Update all form fields with saved data
       setCampaignName(data.campaign_name || '');
+      setBrandName(data.brand_name || '');
       setSelectedChannels(data.input_channels ? data.input_channels.split(',').map((c: string) => c.trim()) : []);
       setSelectedContentTypes(data.input_content_types ? data.input_content_types.split(',').map((c: string) => c.trim()) : []);
       setLandingPageContent(data.landing_page_content || '');
@@ -323,6 +327,7 @@ const AdCopyServicePage: React.FC = () => {
   const clearForm = () => {
     // Clear state-managed fields
     setCampaignName('');
+    setBrandName('');
     setLandingPageContent('');
     setLandingPageUrl('');
     setAdditionalInfo('');
@@ -393,8 +398,8 @@ const AdCopyServicePage: React.FC = () => {
         return;
       }
 
-      if (!campaignName || !landingPageContent || !landingPageUrl) {
-        alert('Please fill in all required fields (Campaign Name, Landing Page Content, and Landing Page URL) before saving the template');
+      if (!campaignName || !landingPageContent || !landingPageUrl || !brandName) {
+        alert('Please fill in all required fields (Campaign Name, Brand Name, Landing Page Content, and Landing Page URL) before saving the template');
         return;
       }
 
@@ -407,6 +412,7 @@ const AdCopyServicePage: React.FC = () => {
       const newTemplate = {
         name: templateName.trim(),
         campaignName,
+        brandName,
         landingPageContent,
         landingPageUrl,
         additionalInfo,
@@ -444,6 +450,7 @@ const AdCopyServicePage: React.FC = () => {
   const applyTemplate = (template: Template) => {
     // Set state-managed fields
     setCampaignName(template.campaignName || '');
+    setBrandName(template.brandName || '');
     setLandingPageContent(template.landingPageContent || '');
     setLandingPageUrl(template.landingPageUrl || '');
     setAdditionalInfo(template.additionalInfo || '');
@@ -693,7 +700,7 @@ const AdCopyServicePage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label htmlFor="campaign_name" className="block text-sm font-medium text-gray-800 mb-1">
-                    Campaign Name <span className="text-red-600">*</span>
+                    Campaign Name *
                   </label>
                   <input
                     type="text"
@@ -701,16 +708,29 @@ const AdCopyServicePage: React.FC = () => {
                     id="campaign_name"
                     value={campaignName}
                     onChange={(e) => setCampaignName(e.target.value)}
-                    placeholder="Enter your campaign name"
+                    className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md p-2 border"
                     required
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
                   />
-                  <p className="mt-1 text-xs text-gray-500">Give your campaign a descriptive name</p>
+                </div>
+                
+                <div>
+                  <label htmlFor="brand_name" className="block text-sm font-medium text-gray-800 mb-1">
+                    Brand Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="brand_name"
+                    id="brand_name"
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                    className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md p-2 border"
+                    required
+                  />
                 </div>
                 
                 <div>
                   <label htmlFor="landing_page_url" className="block text-sm font-medium text-gray-800 mb-1">
-                    Landing Page URL <span className="text-red-600">*</span>
+                    Landing Page URL *
                   </label>
                   <input
                     type="url"
@@ -728,7 +748,7 @@ const AdCopyServicePage: React.FC = () => {
 
               <div>
                 <label htmlFor="landing_page_content" className="block text-sm font-medium text-gray-800 mb-1">
-                  Landing Page Content <span className="text-red-600">*</span>
+                  Landing Page Content *
                 </label>
                 <textarea
                   name="landing_page_content"

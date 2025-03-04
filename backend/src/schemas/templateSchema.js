@@ -3,6 +3,7 @@ const Joi = require('joi');
 const templateSchema = Joi.object({
   name: Joi.string().required(),
   campaignName: Joi.string().required(),
+  brandName: Joi.string().required(),
   landingPageContent: Joi.string().required(),
   landingPageUrl: Joi.string().uri().required(),
   additionalInfo: Joi.string().allow(''),

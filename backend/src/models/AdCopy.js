@@ -10,6 +10,10 @@ const adCopySchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  brand_name: {
+    type: String,
+    required: true
+  },
   input_channels: {
     type: String,
     required: true

@@ -14,6 +14,10 @@ const templateSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  brandName: {
+    type: String,
+    required: true
+  },
   landingPageContent: {
     type: String,
     required: true

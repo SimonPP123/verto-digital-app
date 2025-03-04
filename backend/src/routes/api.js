@@ -204,6 +204,7 @@ router.post('/dify/adcopy', isAuthenticated, async (req, res) => {
         const adCopy = await AdCopy.create({
           user: req.user._id,
           campaign_name: req.body.inputs.campaign_name,
+          brand_name: req.body.inputs.brand_name,
           input_channels: req.body.inputs.input_channels,
           variations: processedOutputs,
           landing_page_content: req.body.inputs.landing_page_content,

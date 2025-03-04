@@ -3,6 +3,7 @@ const Joi = require('joi');
 const adCopySchema = Joi.object({
   inputs: Joi.object({
     campaign_name: Joi.string().required(),
+    brand_name: Joi.string().required(),
     input_channels: Joi.string().pattern(/^(Google|Linkedin|Email|Reddit|Twitter|Facebook)(,\s*(Google|Linkedin|Email|Reddit|Twitter|Facebook))*$/).required(),
     landing_page_content: Joi.string().required(),
     content_material: Joi.string().allow('').default(''),
