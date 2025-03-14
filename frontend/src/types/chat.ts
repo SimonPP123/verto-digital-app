@@ -38,11 +38,5 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { label: 'GPT o3-mini-high', value: 'openai/o3-mini-high' },
   { label: 'Claude 3.5 Sonnet', value: 'anthropic/claude-3.5-sonnet' },
   { label: 'Gemini Flash 2.0', value: 'google/gemini-2.0-flash-exp:free' },
-  { label: 'Gemini Pro 2.0', value: 'google/gemini-2.0-pro-exp-02-05:free' },
-  { label: 'Deepseek v3', value: 'deepseek/deepseek-chat' },
-  { label: 'Deepseek r1', value: 'deepseek/deepseek-r1' },
-  { label: 'Perplexity + Deepseek r1', value: 'perplexity/r1-1776' },
-  { label: 'Perplexity Sonar', value: 'perplexity/sonar' },
-  { label: 'Perplexity Sonar Reasoning', value: 'perplexity/sonar-reasoning' },
-  { label: 'Perplexity Sonar Deep Research', value: 'perplexity/sonar-deep-research' }
+  { label: 'Gemini Pro 2.0', value: 'google/gemini-2.0-pro-exp-02-05:free' }
 ]; 
