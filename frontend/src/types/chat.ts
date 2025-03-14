@@ -43,5 +43,6 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { label: 'Deepseek r1', value: 'deepseek/deepseek-r1' },
   { label: 'Perplexity + Deepseek r1', value: 'perplexity/r1-1776' },
   { label: 'Perplexity Sonar', value: 'perplexity/sonar' },
-  { label: 'Perplexity Sonar Reasoning', value: 'perplexity/sonar-reasoning' }
+  { label: 'Perplexity Sonar Reasoning', value: 'perplexity/sonar-reasoning' },
+  { label: 'Perplexity Sonar Deep Research', value: 'perplexity/sonar-deep-research' }
 ]; 
