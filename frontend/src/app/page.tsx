@@ -36,7 +36,7 @@ const services = [
   {
     title: 'LibreChat AI',
     description: 'Advanced AI chat interface with multiple model support',
-    href: '/service-librechat',
+    href: '/chat',
     icon: '🤖',
     underConstruction: false
   },
