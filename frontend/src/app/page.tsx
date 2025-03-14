@@ -34,6 +34,13 @@ const services = [
     underConstruction: false
   },
   {
+    title: 'LibreChat AI',
+    description: 'Advanced AI chat interface with multiple model support',
+    href: '/service-librechat',
+    icon: '🤖',
+    underConstruction: false
+  },
+  {
     title: 'GA4 Weekly Report',
     description: 'Automated GA4 analytics reports with AI insights',
     href: '/service-ga4report',
