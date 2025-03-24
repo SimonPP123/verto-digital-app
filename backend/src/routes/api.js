@@ -15,6 +15,7 @@ const FormData = require('form-data');
 const ChatSession = require('../models/ChatSession');
 const XLSX = require('xlsx');
 const AudienceAnalysis = require('../models/AudienceAnalysis');
+const GA4Report = require('../models/GA4Report');
 
 // Create uploads directory if it doesn't exist
 const uploadDir = path.join(__dirname, '../../uploads');
@@ -1942,6 +1943,240 @@ router.post('/ads/ai-audiences/callback', express.text({ type: 'text/html' }), a
       success: false,
       message: 'Failed to handle audience analysis callback',
       error: error.message
+    });
+  }
+});
+
+// GA4 Reports API Routes
+
+// Submit a new GA4 report request
+router.post('/analytics/google-analytics', isAuthenticated, async (req, res) => {
+  try {
+    const { propertyId, startDate, endDate, metrics, dimensions, filters, reportFormat } = req.body;
+    
+    // Validate input
+    if (!propertyId || !startDate || !endDate || !metrics || !dimensions) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields'
+      });
+    }
+
+    // Create a placeholder GA4 report
+    const ga4Report = new GA4Report({
+      user: req.user._id,
+      propertyId,
+      startDate,
+      endDate,
+      metrics,
+      dimensions,
+      filters: filters || null,
+      reportFormat: reportFormat || 'summary',
+      content: 'Processing...'
+    });
+
+    // Save the placeholder
+    const savedReport = await ga4Report.save();
+
+    logger.info('Created placeholder GA4 report:', {
+      reportId: savedReport._id,
+      userId: req.user._id
+    });
+
+    // Send the request to n8n
+    const n8nUrl = process.env.N8N_GA4_REPORT;
+    if (!n8nUrl) {
+      throw new Error('N8N_GA4_REPORT environment variable is not set');
+    }
+
+    // Provide callback URL
+    const callbackUrl = `${process.env.BACKEND_URL}/api/analytics/google-analytics/callback?analysisId=${savedReport._id}`;
+
+    // Send the request to n8n
+    await axios.post(n8nUrl, {
+      propertyId,
+      startDate,
+      endDate,
+      metrics,
+      dimensions,
+      filters: filters || null,
+      reportFormat: reportFormat || 'summary',
+      callbackUrl,
+      analysisId: savedReport._id.toString(),
+      userId: req.user._id.toString()
+    });
+
+    return res.json({
+      success: true,
+      message: 'GA4 report request submitted successfully',
+      reportId: savedReport._id
+    });
+    
+  } catch (error) {
+    logger.error('Error submitting GA4 report request:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to submit GA4 report request'
+    });
+  }
+});
+
+// Callback for GA4 reports
+router.post('/analytics/google-analytics/callback', async (req, res) => {
+  try {
+    const { analysisId } = req.query;
+    
+    if (!analysisId) {
+      return res.status(400).json({ error: 'Missing analysisId' });
+    }
+    
+    const report = await GA4Report.findById(analysisId);
+    
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    
+    // Update the report with the content from n8n
+    report.content = req.body.content || req.body;
+    await report.save();
+    
+    logger.info('Updated GA4 report with content:', { analysisId });
+    
+    return res.json({ success: true });
+  } catch (error) {
+    logger.error('Error in GA4 report callback:', error);
+    return res.status(500).json({ error: 'Failed to process callback' });
+  }
+});
+
+// Get GA4 report status
+router.get('/analytics/google-analytics/status', isAuthenticated, async (req, res) => {
+  try {
+    // Get the latest GA4 report for the user
+    const latestReport = await GA4Report.findOne({ user: req.user._id })
+      .sort({ createdAt: -1 });
+
+    if (!latestReport) {
+      return res.json({
+        status: 'not_found',
+        message: 'No GA4 report found. Please submit a new report.'
+      });
+    }
+
+    // Check if the content is still processing
+    if (latestReport.content === 'Processing...') {
+      return res.json({
+        status: 'processing',
+        message: 'Your GA4 report is being processed. Please check back in a few minutes.'
+      });
+    }
+
+    // Return the content
+    return res.json({
+      status: 'completed',
+      content: latestReport.content
+    });
+
+  } catch (error) {
+    logger.error('Error fetching GA4 report status:', error, { user: req.user.email });
+    return res.status(500).json({
+      status: 'failed',
+      message: 'Failed to fetch GA4 report status'
+    });
+  }
+});
+
+// Get saved GA4 reports
+router.get('/analytics/google-analytics/saved', isAuthenticated, async (req, res) => {
+  try {
+    logger.info('Fetching saved GA4 reports for user:', { user: req.user.email });
+    
+    // Find all GA4 reports for this user
+    const savedReports = await GA4Report.find({ 
+      user: req.user._id,
+      content: { $ne: 'Processing...' } // Only return completed reports
+    }).sort({ createdAt: -1 });
+    
+    // Map the reports to include only necessary fields
+    const formattedReports = savedReports.map(report => ({
+      id: report._id,
+      createdAt: report.createdAt,
+      updatedAt: report.updatedAt,
+      propertyId: report.propertyId,
+      startDate: report.startDate,
+      endDate: report.endDate,
+      reportFormat: report.reportFormat,
+      content: report.content
+    }));
+    
+    logger.info('Successfully fetched saved GA4 reports:', { 
+      count: formattedReports.length,
+      user: req.user.email 
+    });
+    
+    return res.json({
+      success: true,
+      reports: formattedReports
+    });
+    
+  } catch (error) {
+    logger.error('Error fetching saved GA4 reports:', error, { user: req.user.email });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch saved GA4 reports'
+    });
+  }
+});
+
+// Delete a GA4 report
+router.delete('/analytics/google-analytics/:id', isAuthenticated, async (req, res) => {
+  try {
+    const reportId = req.params.id;
+    
+    logger.info('Attempting to delete GA4 report:', { 
+      reportId, 
+      user: req.user.email 
+    });
+    
+    // Check if the report exists and belongs to the user
+    const report = await GA4Report.findOne({
+      _id: reportId,
+      user: req.user._id
+    });
+    
+    if (!report) {
+      logger.warn('Report not found or does not belong to user:', { 
+        reportId, 
+        user: req.user.email 
+      });
+      return res.status(404).json({
+        success: false,
+        message: 'Report not found'
+      });
+    }
+    
+    // Delete the report
+    await GA4Report.deleteOne({ _id: reportId });
+    
+    logger.info('Successfully deleted GA4 report:', { 
+      reportId, 
+      user: req.user.email 
+    });
+    
+    return res.json({
+      success: true,
+      message: 'Report deleted successfully',
+      id: reportId
+    });
+    
+  } catch (error) {
+    logger.error('Error deleting GA4 report:', error, { 
+      reportId: req.params.id, 
+      user: req.user.email 
+    });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete report'
     });
   }
 });
