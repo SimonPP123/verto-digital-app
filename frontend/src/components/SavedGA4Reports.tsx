@@ -17,6 +17,16 @@ type GA4Report = {
 
 const renderReportContent = (content: any) => {
   if (!content) return <div>No content available</div>;
+  
+  // Handle placeholder content
+  if (content === 'Processing...') {
+    return (
+      <div className="flex items-center justify-center p-4">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mr-3"></div>
+        <p>Processing your report...</p>
+      </div>
+    );
+  }
 
   // Process the content for rendering
   if (typeof content === 'string') {
@@ -39,31 +49,41 @@ const renderReportContent = (content: any) => {
     );
   } else {
     // Handle structured content
-    return (
-      <div className="space-y-4">
-        {Object.entries(content).map(([key, value]) => (
-          <div key={key} className="bg-white rounded-lg p-4 shadow-sm">
-            <h4 className="text-lg font-semibold text-gray-800 mb-2">
-              {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-            </h4>
-            <div className="prose max-w-none">
-              {typeof value === 'string' ? (
-                // Check if value contains HTML
-                value.includes('<p>') || value.includes('<h') || value.includes('<ul>') ? (
-                  <div dangerouslySetInnerHTML={{ __html: value as string }} />
+    try {
+      return (
+        <div className="space-y-4">
+          {Object.entries(content).map(([key, value]) => (
+            <div key={key} className="bg-white rounded-lg p-4 shadow-sm">
+              <h4 className="text-lg font-semibold text-gray-800 mb-2">
+                {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+              </h4>
+              <div className="prose max-w-none">
+                {typeof value === 'string' ? (
+                  // Check if value contains HTML
+                  value.includes('<p>') || value.includes('<h') || value.includes('<ul>') ? (
+                    <div dangerouslySetInnerHTML={{ __html: value as string }} />
+                  ) : (
+                    value.split('\n').map((line: string, index: number) => (
+                      <p key={index} className="mb-2">{line}</p>
+                    ))
+                  )
                 ) : (
-                  value.split('\n').map((line: string, index: number) => (
-                    <p key={index} className="mb-2">{line}</p>
-                  ))
-                )
-              ) : (
-                <pre className="text-sm bg-gray-50 p-3 rounded">{JSON.stringify(value, null, 2)}</pre>
-              )}
+                  <pre className="text-sm bg-gray-50 p-3 rounded">{JSON.stringify(value, null, 2)}</pre>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-    );
+          ))}
+        </div>
+      );
+    } catch (e) {
+      console.error("Error rendering structured content:", e);
+      return (
+        <div className="prose max-w-none bg-red-50 p-4 rounded-lg">
+          <p className="text-red-600">Error rendering report content. Please try refreshing the page.</p>
+          <pre className="text-sm bg-red-100 p-3 rounded mt-2">{JSON.stringify(content, null, 2)}</pre>
+        </div>
+      );
+    }
   }
 };
 
