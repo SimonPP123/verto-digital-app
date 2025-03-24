@@ -2058,17 +2058,14 @@ router.post('/analytics/google-analytics/callback', express.text({ type: 'text/h
       return res.status(404).json({ error: 'Report not found' });
     }
     
-    // Get raw content directly
-    let rawContent = req.body;
+    // Get raw content directly (like LinkedIn audiences)
+    const rawContent = req.body;
     
     // Make absolutely sure we're not setting content to "Processing..."
     if (!rawContent || rawContent === 'Processing...') {
       logger.error('Received empty or placeholder content in callback', { analysisId });
       return res.status(400).json({ error: 'Invalid content received' });
     }
-    
-    // Process pipe-delimited tables in the content and convert them to proper HTML tables
-    rawContent = convertPipeTablesInContent(rawContent);
     
     // Format HTML content with proper wrapper
     const formattedContent = `<div class="prose max-w-none text-gray-900">${rawContent}</div>`;
@@ -2080,6 +2077,7 @@ router.post('/analytics/google-analytics/callback', express.text({ type: 'text/h
     });
     
     // Update the report with the actual content and mark as completed
+    // This is critical - we MUST store the actual content and update the status
     const updatedReport = await GA4Report.findByIdAndUpdate(
       analysisId,
       { 
@@ -2108,53 +2106,6 @@ router.post('/analytics/google-analytics/callback', express.text({ type: 'text/h
     return res.status(500).json({ error: 'Failed to process callback' });
   }
 });
-
-// Function to convert pipe-delimited tables to HTML tables
-function convertPipeTablesInContent(content) {
-  // Regular expression to find pipe-delimited tables 
-  // Looks for sections with multiple lines starting and ending with | character
-  const tableRegex = /(\|[^\n]*\|\n)((?:\|[^\n]*\|\n)+)/g;
-  
-  // Replace each found table with an HTML table
-  return content.replace(tableRegex, (match) => {
-    // Split the table into rows
-    const rows = match.trim().split('\n');
-    
-    // Start the HTML table
-    let htmlTable = '<table class="table-auto w-full border-collapse text-sm my-4">\n<thead>\n';
-    
-    // Process each row
-    rows.forEach((row, index) => {
-      // Remove the leading and trailing | and split by |
-      const cells = row.trim().split('|').filter(cell => cell.trim() !== '');
-      
-      // Determine if this is a header row, separator row, or data row
-      if (index === 0) {
-        // Header row
-        htmlTable += '<tr class="bg-blue-100 border-b border-blue-200">\n';
-        cells.forEach(cell => {
-          htmlTable += `  <th class="px-4 py-2 text-left font-medium text-blue-800">${cell.trim()}</th>\n`;
-        });
-        htmlTable += '</tr>\n</thead>\n<tbody>\n';
-      } else if (row.includes('---')) {
-        // Skip separator rows (those with dashes)
-        return;
-      } else {
-        // Data row
-        htmlTable += '<tr class="border-b border-gray-200 hover:bg-gray-50">\n';
-        cells.forEach(cell => {
-          htmlTable += `  <td class="px-4 py-2">${cell.trim()}</td>\n`;
-        });
-        htmlTable += '</tr>\n';
-      }
-    });
-    
-    // Close the HTML table
-    htmlTable += '</tbody>\n</table>';
-    
-    return htmlTable;
-  });
-}
 
 // Get GA4 report status
 router.get('/analytics/google-analytics/status', isAuthenticated, async (req, res) => {
