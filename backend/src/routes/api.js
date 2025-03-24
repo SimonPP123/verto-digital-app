@@ -1993,7 +1993,7 @@ router.post('/analytics/google-analytics', isAuthenticated, async (req, res) => 
     // Calculate base URL for callbacks based on environment
     const baseUrl = process.env.NODE_ENV === 'production' 
       ? 'https://bolt.vertodigital.com' 
-      : process.env.BACKEND_URL;
+      : 'http://localhost:5001';
 
     // Provide callback URL
     const callbackUrl = `${baseUrl}/api/analytics/google-analytics/callback?analysisId=${savedReport._id}`;
@@ -2059,7 +2059,7 @@ router.post('/analytics/google-analytics/callback', async (req, res) => {
     
     // Determine content format and store appropriately
     let content;
-    if (req.body.content) {
+    if (req.body && req.body.content) {
       // If the content is in the expected field
       content = req.body.content;
     } else if (typeof req.body === 'string') {
@@ -2072,13 +2072,16 @@ router.post('/analytics/google-analytics/callback', async (req, res) => {
     
     // Set the content and explicitly mark as completed
     report.content = content;
-    report.status = 'completed'; // Add an explicit status field
+    report.status = 'completed';
+    report.updatedAt = new Date();
     
     await report.save();
     
     logger.info('Successfully updated GA4 report with content', { 
       analysisId,
-      contentLength: typeof content === 'string' ? content.length : 'object'
+      contentType: typeof content,
+      contentLength: typeof content === 'string' ? content.length : 'object',
+      status: report.status
     });
     
     return res.json({ success: true });
@@ -2103,9 +2106,45 @@ router.get('/analytics/google-analytics/status', isAuthenticated, async (req, re
       });
     }
 
+    // Auto-fix reports that are stuck in processing state for too long (over 5 minutes)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    if (latestReport.status === 'processing' && latestReport.createdAt < fiveMinutesAgo) {
+      logger.warn('Found a stuck GA4 report, marking as failed', { 
+        reportId: latestReport._id,
+        createdAt: latestReport.createdAt
+      });
+      
+      latestReport.status = 'failed';
+      await latestReport.save();
+      
+      return res.json({
+        status: 'failed',
+        message: 'Your GA4 report processing failed. Please try again.'
+      });
+    }
+
+    // Auto-fix reports that have content but are still marked as processing
+    if (latestReport.status === 'processing' && 
+        latestReport.content && 
+        latestReport.content !== 'Processing...' &&
+        typeof latestReport.content !== 'string') {
+      logger.warn('Found a report with content but wrong status, fixing', { 
+        reportId: latestReport._id
+      });
+      
+      latestReport.status = 'completed';
+      await latestReport.save();
+      
+      // Continue to return content below
+    }
+
     // Check report status - use explicit status field
     if (latestReport.status === 'processing') {
-      logger.info('GA4 report still processing', { reportId: latestReport._id });
+      logger.info('GA4 report still processing', { 
+        reportId: latestReport._id,
+        createdAt: latestReport.createdAt, 
+        timeSinceCreation: Date.now() - latestReport.createdAt
+      });
       return res.json({
         status: 'processing',
         message: 'Your GA4 report is being processed. Please check back in a few minutes.'
@@ -2144,9 +2183,27 @@ router.get('/analytics/google-analytics/status', isAuthenticated, async (req, re
 // Get saved GA4 reports
 router.get('/analytics/google-analytics/saved', isAuthenticated, async (req, res) => {
   try {
-    logger.info('Fetching saved GA4 reports for user:', { user: req.user.email });
+    logger.info('Fetching saved GA4 reports for user:', { 
+      userId: req.user._id,
+      userEmail: req.user.email 
+    });
     
-    // Find all completed GA4 reports for this user
+    // First, find all reports regardless of status for debugging
+    const allReports = await GA4Report.find({ 
+      user: req.user._id
+    }).sort({ createdAt: -1 });
+    
+    logger.info('Found GA4 reports with all statuses:', {
+      totalCount: allReports.length,
+      statusCounts: {
+        processing: allReports.filter(r => r.status === 'processing').length,
+        completed: allReports.filter(r => r.status === 'completed').length,
+        failed: allReports.filter(r => r.status === 'failed').length,
+        undefined: allReports.filter(r => !r.status).length
+      }
+    });
+    
+    // Now find completed reports
     const savedReports = await GA4Report.find({ 
       user: req.user._id,
       status: 'completed' // Only return completed reports
@@ -2164,7 +2221,8 @@ router.get('/analytics/google-analytics/saved', isAuthenticated, async (req, res
       startDate: report.startDate,
       endDate: report.endDate,
       reportFormat: report.reportFormat,
-      content: report.content
+      content: report.content,
+      status: report.status
     }));
     
     logger.info('Successfully fetched saved GA4 reports:', { 
