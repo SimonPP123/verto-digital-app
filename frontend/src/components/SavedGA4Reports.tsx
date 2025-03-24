@@ -20,6 +20,16 @@ const renderReportContent = (content: any) => {
 
   // Process the content for rendering
   if (typeof content === 'string') {
+    // Check if the content is HTML
+    if (content.includes('<p>') || content.includes('<h') || content.includes('<ul>')) {
+      return (
+        <div 
+          className="prose max-w-none" 
+          dangerouslySetInnerHTML={{ __html: content }}
+        />
+      );
+    }
+    // Regular text content
     return (
       <div className="prose max-w-none">
         {content.split('\n').map((line: string, index: number) => (
@@ -38,9 +48,14 @@ const renderReportContent = (content: any) => {
             </h4>
             <div className="prose max-w-none">
               {typeof value === 'string' ? (
-                value.split('\n').map((line: string, index: number) => (
-                  <p key={index} className="mb-2">{line}</p>
-                ))
+                // Check if value contains HTML
+                value.includes('<p>') || value.includes('<h') || value.includes('<ul>') ? (
+                  <div dangerouslySetInnerHTML={{ __html: value as string }} />
+                ) : (
+                  value.split('\n').map((line: string, index: number) => (
+                    <p key={index} className="mb-2">{line}</p>
+                  ))
+                )
               ) : (
                 <pre className="text-sm bg-gray-50 p-3 rounded">{JSON.stringify(value, null, 2)}</pre>
               )}

@@ -62,7 +62,13 @@ export default function GA4ReportServicePage() {
       const interval = setInterval(async () => {
         try {
           const response = await fetch('/api/analytics/google-analytics/status');
+          
+          if (!response.ok) {
+            throw new Error('Failed to fetch report status');
+          }
+          
           const data = await response.json();
+          console.log('Status response:', data);
 
           if (data.status === 'completed') {
             setAnalysisStatus('completed');

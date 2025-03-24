@@ -2027,20 +2027,45 @@ router.post('/analytics/google-analytics/callback', async (req, res) => {
     const { analysisId } = req.query;
     
     if (!analysisId) {
+      logger.error('Missing analysisId in callback', { query: req.query });
       return res.status(400).json({ error: 'Missing analysisId' });
     }
+    
+    logger.info('Received GA4 report callback with body:', { 
+      analysisId,
+      contentType: typeof req.body.content,
+      bodyKeys: Object.keys(req.body),
+      hasDirectContent: typeof req.body === 'string'
+    });
     
     const report = await GA4Report.findById(analysisId);
     
     if (!report) {
+      logger.error('Report not found in callback', { analysisId });
       return res.status(404).json({ error: 'Report not found' });
     }
     
-    // Update the report with the content from n8n
-    report.content = req.body.content || req.body;
+    // Determine content format and store appropriately
+    let content;
+    if (req.body.content) {
+      // If the content is in the expected field
+      content = req.body.content;
+    } else if (typeof req.body === 'string') {
+      // If the entire body is the content
+      content = req.body;
+    } else {
+      // If the entire body should be the content
+      content = req.body;
+    }
+    
+    // Update the report with the received content
+    report.content = content;
     await report.save();
     
-    logger.info('Updated GA4 report with content:', { analysisId });
+    logger.info('Updated GA4 report with content', { 
+      analysisId,
+      contentLength: typeof content === 'string' ? content.length : 'object'
+    });
     
     return res.json({ success: true });
   } catch (error) {
@@ -2057,6 +2082,7 @@ router.get('/analytics/google-analytics/status', isAuthenticated, async (req, re
       .sort({ createdAt: -1 });
 
     if (!latestReport) {
+      logger.info('No GA4 report found for user', { userId: req.user._id });
       return res.json({
         status: 'not_found',
         message: 'No GA4 report found. Please submit a new report.'
@@ -2065,11 +2091,22 @@ router.get('/analytics/google-analytics/status', isAuthenticated, async (req, re
 
     // Check if the content is still processing
     if (latestReport.content === 'Processing...') {
+      logger.info('GA4 report still processing', { reportId: latestReport._id });
       return res.json({
         status: 'processing',
         message: 'Your GA4 report is being processed. Please check back in a few minutes.'
       });
     }
+
+    // Log the type and structure of content
+    logger.info('Returning completed GA4 report', { 
+      reportId: latestReport._id,
+      contentType: typeof latestReport.content,
+      isHtml: typeof latestReport.content === 'string' && 
+              (latestReport.content.includes('<p>') || 
+               latestReport.content.includes('<h') ||
+               latestReport.content.includes('<ul>'))
+    });
 
     // Return the content
     return res.json({
