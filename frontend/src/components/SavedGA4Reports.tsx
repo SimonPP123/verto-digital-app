@@ -30,16 +30,19 @@ const renderReportContent = (content: any) => {
 
   // Process the content for rendering
   if (typeof content === 'string') {
-    // Check if the content is HTML
-    if (content.includes('<p>') || content.includes('<h') || content.includes('<ul>')) {
+    // HTML content with proper markers is most common for GA4 reports
+    if (content.includes('<p>') || content.includes('<h') || content.includes('<ul>') || content.includes('<div')) {
+      console.log('Rendering HTML content');
       return (
         <div 
-          className="prose max-w-none" 
+          className="prose prose-sm max-w-none prose-headings:text-blue-800 prose-h3:text-lg prose-h4:text-base" 
           dangerouslySetInnerHTML={{ __html: content }}
         />
       );
     }
+    
     // Regular text content
+    console.log('Rendering plain text content');
     return (
       <div className="prose max-w-none">
         {content.split('\n').map((line: string, index: number) => (
@@ -50,6 +53,7 @@ const renderReportContent = (content: any) => {
   } else {
     // Handle structured content
     try {
+      console.log('Rendering structured content object');
       return (
         <div className="space-y-4">
           {Object.entries(content).map(([key, value]) => (

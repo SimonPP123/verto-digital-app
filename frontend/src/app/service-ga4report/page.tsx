@@ -59,8 +59,15 @@ export default function GA4ReportServicePage() {
   // Poll for results
   useEffect(() => {
     if (analysisStatus === 'processing') {
+      // Start with a 2-second interval for more responsive updates
+      let pollInterval = 2000;
+      let pollCount = 0;
+      
       const interval = setInterval(async () => {
         try {
+          pollCount++;
+          console.log(`Polling for report status (attempt ${pollCount})...`);
+          
           const response = await fetch('/api/analytics/google-analytics/status');
           
           if (!response.ok) {
@@ -80,11 +87,20 @@ export default function GA4ReportServicePage() {
             setAnalysisStatus('error');
             setResultMessage(`Error: ${data.message || 'Failed to generate report'}`);
             setIsProcessing(false);
+          } else if (data.status === 'processing') {
+            // If still processing after 5 attempts, slow down polling to reduce server load
+            if (pollCount > 5) {
+              pollInterval = 5000;
+            }
+            // If still processing after 20 attempts, slow down even more
+            if (pollCount > 20) {
+              pollInterval = 10000;
+            }
           }
         } catch (error) {
           console.error('Error checking report status:', error);
         }
-      }, 5000);
+      }, pollInterval);
 
       return () => clearInterval(interval);
     }

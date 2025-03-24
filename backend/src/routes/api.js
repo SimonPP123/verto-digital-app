@@ -2033,7 +2033,7 @@ router.post('/analytics/google-analytics', isAuthenticated, async (req, res) => 
 });
 
 // Callback for GA4 reports
-router.post('/analytics/google-analytics/callback', async (req, res) => {
+router.post('/analytics/google-analytics/callback', express.text({ type: 'text/html' }), async (req, res) => {
   try {
     const { analysisId } = req.query;
     
@@ -2058,46 +2058,49 @@ router.post('/analytics/google-analytics/callback', async (req, res) => {
       return res.status(404).json({ error: 'Report not found' });
     }
     
-    // Determine content format and store appropriately
-    let content;
-    if (req.body && req.body.content) {
-      // If the content is in the expected field
-      content = req.body.content;
-    } else if (typeof req.body === 'string') {
-      // If the entire body is the content as string
-      content = req.body;
-      
-      // Check if it's HTML content and wrap it properly if needed
-      if (content.includes('<h') || content.includes('<p') || content.includes('<ul')) {
-        content = `<div class="prose max-w-none">${content}</div>`;
-      }
-    } else {
-      // If the entire body is the content object
-      content = req.body;
-    }
+    // Get raw content directly (like LinkedIn audiences)
+    const rawContent = req.body;
     
-    // Ensure content is not "Processing..." - verify we actually have real content
-    if (content === 'Processing...' || !content) {
+    // Make absolutely sure we're not setting content to "Processing..."
+    if (!rawContent || rawContent === 'Processing...') {
       logger.error('Received empty or placeholder content in callback', { analysisId });
       return res.status(400).json({ error: 'Invalid content received' });
     }
     
-    // Set the content and explicitly mark as completed
-    report.content = content;
-    report.status = 'completed';
-    report.updatedAt = new Date();
+    // Format HTML content with proper wrapper
+    const formattedContent = `<div class="prose max-w-none text-gray-900">${rawContent}</div>`;
     
-    await report.save();
+    logger.info('Processed GA4 report HTML content:', {
+      contentLength: rawContent.length,
+      formattedLength: formattedContent.length,
+      preview: formattedContent.substring(0, 100) + '...'
+    });
+    
+    // Update the report with the actual content and mark as completed
+    // This is critical - we MUST store the actual content and update the status
+    const updatedReport = await GA4Report.findByIdAndUpdate(
+      analysisId,
+      { 
+        content: formattedContent,
+        status: 'completed',
+        updatedAt: new Date()
+      },
+      { new: true }
+    );
     
     logger.info('Successfully updated GA4 report with content', { 
       analysisId,
-      contentType: typeof content,
-      contentLength: typeof content === 'string' ? content.length : 'object',
-      status: report.status,
-      contentSample: typeof content === 'string' ? content.substring(0, 100) + '...' : 'object'
+      reportId: updatedReport._id,
+      contentType: typeof formattedContent,
+      contentLength: formattedContent.length,
+      status: updatedReport.status
     });
     
-    return res.json({ success: true });
+    return res.json({
+      success: true,
+      message: 'GA4 report updated successfully',
+      reportId: updatedReport._id
+    });
   } catch (error) {
     logger.error('Error in GA4 report callback:', error);
     return res.status(500).json({ error: 'Failed to process callback' });
@@ -2119,6 +2122,36 @@ router.get('/analytics/google-analytics/status', isAuthenticated, async (req, re
       });
     }
 
+    // Log the report state for debugging
+    logger.info('Retrieved GA4 report for status check:', {
+      reportId: latestReport._id,
+      status: latestReport.status,
+      contentType: typeof latestReport.content,
+      contentIsProcessing: latestReport.content === 'Processing...',
+      contentLength: typeof latestReport.content === 'string' 
+        ? latestReport.content.length 
+        : JSON.stringify(latestReport.content).length
+    });
+
+    // Auto-fix reports that are completed but still have "Processing..." as content
+    if (latestReport.status === 'completed' && 
+        (latestReport.content === 'Processing...' || !latestReport.content)) {
+      logger.warn('Report marked as completed but has placeholder content - fixing inconsistency', {
+        reportId: latestReport._id,
+        status: latestReport.status,
+        content: latestReport.content
+      });
+      
+      // This is an inconsistent state - set back to processing
+      latestReport.status = 'processing';
+      await latestReport.save();
+      
+      return res.json({
+        status: 'processing',
+        message: 'Your GA4 report is being processed. Please check back in a few minutes.'
+      });
+    }
+
     // Auto-fix reports that are stuck in processing state for too long (over 5 minutes)
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     if (latestReport.status === 'processing' && latestReport.createdAt < fiveMinutesAgo) {
@@ -2132,11 +2165,11 @@ router.get('/analytics/google-analytics/status', isAuthenticated, async (req, re
       
       return res.json({
         status: 'failed',
-        message: 'Your GA4 report processing failed. Please try again.'
+        message: 'Your GA4 report processing failed due to timeout. Please try again.'
       });
     }
 
-    // Auto-fix reports that have content but are still marked as processing
+    // Auto-fix reports that have real content but are still marked as processing
     if (latestReport.status === 'processing' && 
         latestReport.content && 
         latestReport.content !== 'Processing...') {
@@ -2147,23 +2180,7 @@ router.get('/analytics/google-analytics/status', isAuthenticated, async (req, re
       latestReport.status = 'completed';
       await latestReport.save();
       
-      // Continue to return content below
-    }
-
-    // Fix reports where status is completed but content is still "Processing..."
-    if (latestReport.status === 'completed' && latestReport.content === 'Processing...') {
-      logger.warn('Found a completed report with placeholder content, fixing status', { 
-        reportId: latestReport._id
-      });
-      
-      // This is an inconsistent state - marking as processing to trigger retry
-      latestReport.status = 'processing';
-      await latestReport.save();
-      
-      return res.json({
-        status: 'processing',
-        message: 'Your GA4 report is still being processed. Please check back in a few minutes.'
-      });
+      // Continue to return the content below
     }
 
     // Check report status - use explicit status field
@@ -2196,7 +2213,7 @@ router.get('/analytics/google-analytics/status', isAuthenticated, async (req, re
         : 'object'
     });
 
-    // Return the content
+    // Return the content - for completed reports
     return res.json({
       status: 'completed',
       content: latestReport.content
