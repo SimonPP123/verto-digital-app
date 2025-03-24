@@ -1972,7 +1972,8 @@ router.post('/analytics/google-analytics', isAuthenticated, async (req, res) => 
       dimensions,
       filters: filters || null,
       reportFormat: reportFormat || 'summary',
-      content: 'Processing...'
+      content: 'Processing...',
+      status: 'processing'
     });
 
     // Save the placeholder
@@ -1989,8 +1990,18 @@ router.post('/analytics/google-analytics', isAuthenticated, async (req, res) => 
       throw new Error('N8N_GA4_REPORT environment variable is not set');
     }
 
+    // Calculate base URL for callbacks based on environment
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://bolt.vertodigital.com' 
+      : process.env.BACKEND_URL;
+
     // Provide callback URL
-    const callbackUrl = `${process.env.BACKEND_URL}/api/analytics/google-analytics/callback?analysisId=${savedReport._id}`;
+    const callbackUrl = `${baseUrl}/api/analytics/google-analytics/callback?analysisId=${savedReport._id}`;
+    
+    logger.info('Sending request to n8n with callback URL:', { 
+      callbackUrl,
+      n8nUrl: n8nUrl
+    });
 
     // Send the request to n8n
     await axios.post(n8nUrl, {
@@ -2031,11 +2042,12 @@ router.post('/analytics/google-analytics/callback', async (req, res) => {
       return res.status(400).json({ error: 'Missing analysisId' });
     }
     
-    logger.info('Received GA4 report callback with body:', { 
+    // Log request body for debugging
+    logger.info('Received GA4 report callback:', { 
       analysisId,
-      contentType: typeof req.body.content,
-      bodyKeys: Object.keys(req.body),
-      hasDirectContent: typeof req.body === 'string'
+      bodyType: typeof req.body,
+      bodyLength: typeof req.body === 'string' ? req.body.length : JSON.stringify(req.body).length,
+      requestHeaders: req.headers['content-type']
     });
     
     const report = await GA4Report.findById(analysisId);
@@ -2051,18 +2063,20 @@ router.post('/analytics/google-analytics/callback', async (req, res) => {
       // If the content is in the expected field
       content = req.body.content;
     } else if (typeof req.body === 'string') {
-      // If the entire body is the content
+      // If the entire body is the content as string
       content = req.body;
     } else {
-      // If the entire body should be the content
+      // If the entire body is the content
       content = req.body;
     }
     
-    // Update the report with the received content
+    // Set the content and explicitly mark as completed
     report.content = content;
+    report.status = 'completed'; // Add an explicit status field
+    
     await report.save();
     
-    logger.info('Updated GA4 report with content', { 
+    logger.info('Successfully updated GA4 report with content', { 
       analysisId,
       contentLength: typeof content === 'string' ? content.length : 'object'
     });
@@ -2089,12 +2103,18 @@ router.get('/analytics/google-analytics/status', isAuthenticated, async (req, re
       });
     }
 
-    // Check if the content is still processing
-    if (latestReport.content === 'Processing...') {
+    // Check report status - use explicit status field
+    if (latestReport.status === 'processing') {
       logger.info('GA4 report still processing', { reportId: latestReport._id });
       return res.json({
         status: 'processing',
         message: 'Your GA4 report is being processed. Please check back in a few minutes.'
+      });
+    } else if (latestReport.status === 'failed') {
+      logger.info('GA4 report processing failed', { reportId: latestReport._id });
+      return res.json({
+        status: 'failed',
+        message: 'Your GA4 report processing failed. Please try again.'
       });
     }
 
@@ -2102,10 +2122,8 @@ router.get('/analytics/google-analytics/status', isAuthenticated, async (req, re
     logger.info('Returning completed GA4 report', { 
       reportId: latestReport._id,
       contentType: typeof latestReport.content,
-      isHtml: typeof latestReport.content === 'string' && 
-              (latestReport.content.includes('<p>') || 
-               latestReport.content.includes('<h') ||
-               latestReport.content.includes('<ul>'))
+      contentLength: typeof latestReport.content === 'string' ? latestReport.content.length : 'object',
+      status: latestReport.status
     });
 
     // Return the content
@@ -2128,11 +2146,14 @@ router.get('/analytics/google-analytics/saved', isAuthenticated, async (req, res
   try {
     logger.info('Fetching saved GA4 reports for user:', { user: req.user.email });
     
-    // Find all GA4 reports for this user
+    // Find all completed GA4 reports for this user
     const savedReports = await GA4Report.find({ 
       user: req.user._id,
-      content: { $ne: 'Processing...' } // Only return completed reports
+      status: 'completed' // Only return completed reports
     }).sort({ createdAt: -1 });
+    
+    // Log count of found reports
+    logger.info(`Found ${savedReports.length} completed GA4 reports`);
     
     // Map the reports to include only necessary fields
     const formattedReports = savedReports.map(report => ({

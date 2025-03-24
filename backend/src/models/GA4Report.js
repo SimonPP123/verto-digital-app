@@ -39,6 +39,11 @@ const ga4ReportSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     default: 'Processing...'
   },
+  status: {
+    type: String,
+    enum: ['processing', 'completed', 'failed'],
+    default: 'processing'
+  },
   createdAt: {
     type: Date,
     default: Date.now
