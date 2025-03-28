@@ -82,6 +82,7 @@ async function startServer() {
     // Routes configuration
     const apiRouter = express.Router();
     apiRouter.use('/auth', require('./routes/auth'));
+    apiRouter.use('/assistant', require('./routes/api/assistant'));
     apiRouter.use('/', require('./routes/api'));
 
     // Health check endpoint

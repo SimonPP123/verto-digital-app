@@ -39,6 +39,13 @@ const services = [
     href: '/service-ga4report',
     icon: '📊',
     underConstruction: true
+  },
+  {
+    title: 'AI Assistant',
+    description: 'Interactive AI assistant with template system',
+    href: '/service-ai-assistant',
+    icon: '🤖',
+    underConstruction: false
   }
 ];
 

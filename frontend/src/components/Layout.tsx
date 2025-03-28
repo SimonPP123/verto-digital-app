@@ -274,6 +274,15 @@ export default function Layout({ children }: LayoutProps) {
                               <span>Chat with Files</span>
                             </div>
                           </Link>
+                          <Link 
+                            href="/service-ai-assistant" 
+                            className="group flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-verto-blue-primary"
+                          >
+                            <span className="mr-3">🤖</span>
+                            <div className="flex-1">
+                              <span>AI Assistant</span>
+                            </div>
+                          </Link>
                         </div>
                       </div>
                     )}
