@@ -3,19 +3,22 @@ const logger = require('../src/utils/logger');
 const User = require('../src/models/User');
 
 module.exports = function(passport) {
-  // We'll set the callback URL dynamically per-request
+  // Default callback path - actual URL will be provided in auth route
   const baseCallbackPath = '/api/auth/google/callback';
   
   passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackURL: baseCallbackPath,
-    proxy: true,
-    // This is the key change - pass a function to dynamically determine the callback URL
-    passReqToCallback: true
+    proxy: true, // Essential for handling proxied requests correctly
+    passReqToCallback: true // Pass the request object to the callback for context
   },
   async (req, accessToken, refreshToken, profile, done) => {
     try {
+      // Log the callback URL being used for debugging
+      const callbackURL = req.session?.callbackUrl || 'No callback URL in session';
+      logger.info(`OAuth callback using URL: ${callbackURL}`);
+      
       const email = profile.emails[0].value;
       
       // Check if email is from vertodigital.com domain
@@ -36,6 +39,13 @@ module.exports = function(passport) {
           picture: profile.photos[0].value
         });
         logger.info(`New user created: ${email}`);
+      } else {
+        // Update the user's picture if it has changed
+        if (user.picture !== profile.photos[0].value) {
+          user.picture = profile.photos[0].value;
+          await user.save();
+          logger.info(`Updated profile picture for user: ${email}`);
+        }
       }
 
       logger.info(`User authenticated successfully: ${email}`);
@@ -47,12 +57,17 @@ module.exports = function(passport) {
   }));
 
   passport.serializeUser((user, done) => {
+    logger.info(`Serializing user: ${user.email}`);
     done(null, user.id);
   });
 
   passport.deserializeUser(async (id, done) => {
     try {
       const user = await User.findById(id);
+      if (!user) {
+        logger.error(`User not found during deserialization: ${id}`);
+        return done(null, false);
+      }
       done(null, user);
     } catch (error) {
       logger.error('Deserialization error:', error);

@@ -3,6 +3,14 @@ const passport = require('passport');
 const router = express.Router();
 const logger = require('../utils/logger');
 const url = require('url');
+const crypto = require('crypto');
+
+// List of allowed callback domains to match Google Cloud Console configuration
+const ALLOWED_CALLBACK_DOMAINS = [
+  'https://bolt.vertodigital.com',
+  'http://localhost:5001',
+  'http://localhost:3000'
+];
 
 // Helper function to get the appropriate redirect URL for after authentication
 const getRedirectUrl = (req) => {
@@ -30,100 +38,122 @@ const getRedirectUrl = (req) => {
   return process.env.FRONTEND_URL;
 };
 
-// Helper function to get the full URL including protocol, host and port
-const getFullUrl = (req, path) => {
+// Helper function to get the callback URL registered in Google Cloud Console
+const getCallbackUrl = (req) => {
+  // Get base domain from request
   const protocol = req.headers['x-forwarded-proto'] || req.protocol;
   const host = req.headers['x-forwarded-host'] || req.headers.host;
-  return `${protocol}://${host}${path}`;
+  const requestOrigin = `${protocol}://${host}`;
+  
+  logger.info(`Request origin: ${requestOrigin}`);
+  
+  // Try to match with one of our allowed domains
+  for (const domain of ALLOWED_CALLBACK_DOMAINS) {
+    if (requestOrigin.startsWith(domain)) {
+      const callbackUrl = `${domain}/api/auth/google/callback`;
+      logger.info(`Using callback URL: ${callbackUrl}`);
+      return callbackUrl;
+    }
+  }
+  
+  // Default fallback to environment variable
+  const fallbackUrl = `${process.env.BACKEND_URL}/api/auth/google/callback`;
+  logger.info(`Using fallback callback URL: ${fallbackUrl}`);
+  return fallbackUrl;
 };
 
 // Google OAuth login route with dynamic callback URL
-router.get('/google',
-  (req, res, next) => {
-    logger.info('Initiating Google OAuth login');
-    logger.info(`Session ID: ${req.sessionID}`);
-    
-    // Save the origin in the session for the callback
-    const origin = req.get('origin');
-    if (origin) {
-      logger.info(`Saving origin for redirect: ${origin}`);
-      req.session.authOrigin = origin;
-    } else {
-      const referer = req.get('referer');
-      if (referer) {
-        try {
-          const parsedUrl = new URL(referer);
-          const refererOrigin = `${parsedUrl.protocol}//${parsedUrl.host}`;
-          logger.info(`Saving referer origin for redirect: ${refererOrigin}`);
-          req.session.authOrigin = refererOrigin;
-        } catch (error) {
-          logger.error(`Error parsing referer URL: ${referer}`, error);
-        }
+router.get('/google', (req, res, next) => {
+  logger.info('Initiating Google OAuth login');
+  logger.info(`Session ID: ${req.sessionID}`);
+  
+  // Save the origin in the session for the callback
+  const origin = req.get('origin');
+  if (origin) {
+    logger.info(`Saving origin for redirect: ${origin}`);
+    req.session.authOrigin = origin;
+  } else {
+    const referer = req.get('referer');
+    if (referer) {
+      try {
+        const parsedUrl = new URL(referer);
+        const refererOrigin = `${parsedUrl.protocol}//${parsedUrl.host}`;
+        logger.info(`Saving referer origin for redirect: ${refererOrigin}`);
+        req.session.authOrigin = refererOrigin;
+      } catch (error) {
+        logger.error(`Error parsing referer URL: ${referer}`, error);
       }
     }
-    
-    // Get the host being used for this request
-    const host = req.headers.host;
-    logger.info(`Request host: ${host}`);
-    
-    // Save full URL for the callback in the session
-    const fullCallbackUrl = getFullUrl(req, '/api/auth/google/callback');
-    logger.info(`Using callback URL: ${fullCallbackUrl}`);
-    req.session.callbackUrl = fullCallbackUrl;
-    
-    // Must save session before redirect to Google
-    req.session.save((err) => {
-      if (err) {
-        logger.error('Error saving session:', err);
-      }
-      
-      // Use authenticate with the correct callbackURL for this request
-      passport.authenticate('google', {
-        scope: ['profile', 'email'],
-        prompt: 'select_account',
-        callbackURL: fullCallbackUrl
-      })(req, res, next);
-    });
   }
-);
+  
+  // Generate a secure state parameter to prevent CSRF
+  const state = crypto.randomBytes(16).toString('hex');
+  req.session.oauthState = state;
+  
+  // Get the appropriate callback URL
+  const callbackUrl = getCallbackUrl(req);
+  req.session.callbackUrl = callbackUrl;
+  
+  // Force save the session before redirecting to Google
+  req.session.save((err) => {
+    if (err) {
+      logger.error('Error saving session before Google redirect:', err);
+      return res.status(500).send('Error preparing authentication. Please try again.');
+    }
+    
+    // Now that session is saved, authenticate with Google
+    passport.authenticate('google', {
+      scope: ['profile', 'email'],
+      prompt: 'select_account',
+      callbackURL: callbackUrl,
+      state: state
+    })(req, res, next);
+  });
+});
 
 // Google OAuth callback route
-router.get('/google/callback',
-  (req, res, next) => {
-    logger.info('Received Google OAuth callback');
-    logger.info(`Session ID: ${req.sessionID}`);
-    
-    // Get the callback URL from the session or generate it again
-    let callbackUrl = req.session.callbackUrl;
-    if (!callbackUrl) {
-      callbackUrl = getFullUrl(req, '/api/auth/google/callback');
-      logger.info(`No callback URL in session, generated: ${callbackUrl}`);
-    } else {
-      logger.info(`Using callback URL from session: ${callbackUrl}`);
-    }
-    
-    // Use the same callback URL for verification
-    passport.authenticate('google', {
-      failureRedirect: '/api/auth/failure',
-      callbackURL: callbackUrl,
-      session: true
-    })(req, res, next);
-  },
-  (req, res) => {
-    if (!req.user) {
-      logger.error('Authentication failed: No user data');
-      return res.redirect(`${getRedirectUrl(req)}/login?error=domain&message=Only+@vertodigital.com+emails+are+allowed`);
-    }
-
-    if (!req.user.email.endsWith('@vertodigital.com')) {
-      logger.error(`Unauthorized email domain: ${req.user.email}`);
-      return res.redirect(`${getRedirectUrl(req)}/login?error=domain&message=Only+@vertodigital.com+emails+are+allowed`);
-    }
-
-    logger.info(`User ${req.user.email} successfully authenticated`);
-    res.redirect(getRedirectUrl(req));
+router.get('/google/callback', (req, res, next) => {
+  logger.info('Received Google OAuth callback');
+  logger.info(`Session ID: ${req.sessionID}`);
+  
+  // Verify the state parameter to prevent CSRF
+  const receivedState = req.query.state;
+  const savedState = req.session.oauthState;
+  
+  if (!savedState || receivedState !== savedState) {
+    logger.error(`OAuth state mismatch. Expected: ${savedState}, Received: ${receivedState}`);
+    return res.redirect(`${getRedirectUrl(req)}/login?error=security&message=Authentication+failed+due+to+security+concerns`);
   }
-);
+  
+  // Get the callback URL from the session or regenerate it
+  let callbackUrl = req.session.callbackUrl;
+  if (!callbackUrl) {
+    callbackUrl = getCallbackUrl(req);
+    logger.info(`No callback URL in session, generated: ${callbackUrl}`);
+  } else {
+    logger.info(`Using callback URL from session: ${callbackUrl}`);
+  }
+  
+  // Use the same callback URL for verification that we sent to Google
+  passport.authenticate('google', {
+    failureRedirect: '/api/auth/failure',
+    callbackURL: callbackUrl,
+    session: true
+  })(req, res, next);
+}, (req, res) => {
+  if (!req.user) {
+    logger.error('Authentication failed: No user data');
+    return res.redirect(`${getRedirectUrl(req)}/login?error=domain&message=Only+@vertodigital.com+emails+are+allowed`);
+  }
+
+  if (!req.user.email.endsWith('@vertodigital.com')) {
+    logger.error(`Unauthorized email domain: ${req.user.email}`);
+    return res.redirect(`${getRedirectUrl(req)}/login?error=domain&message=Only+@vertodigital.com+emails+are+allowed`);
+  }
+
+  logger.info(`User ${req.user.email} successfully authenticated`);
+  res.redirect(getRedirectUrl(req));
+});
 
 // Authentication failure handler
 router.get('/failure', (req, res) => {

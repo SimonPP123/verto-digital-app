@@ -17,6 +17,8 @@ const XLSX = require('xlsx');
 const AudienceAnalysis = require('../models/AudienceAnalysis');
 const GA4Report = require('../models/GA4Report');
 const GoogleAnalyticsAuth = require('../models/GoogleAnalyticsAuth');
+const crypto = require('crypto');
+const User = require('../models/User');
 
 // Create uploads directory if it doesn't exist
 const uploadDir = path.join(__dirname, '../../uploads');
@@ -2348,6 +2350,26 @@ router.delete('/analytics/google-analytics/:id', isAuthenticated, async (req, re
 
 // Google Analytics 4 Authentication Routes
 
+// Helper function to get the appropriate callback URL for Google Analytics
+const getGACallbackUrl = (req) => {
+  // Default to env setting
+  let baseUrl = process.env.BACKEND_URL;
+  
+  // If request comes from a production domain
+  if (req.headers.host && !req.headers.host.includes('localhost')) {
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    baseUrl = `${protocol}://${req.headers.host}`;
+  }
+  
+  // Origin header can override for non-localhost
+  if (req.headers.origin && !req.headers.origin.includes('localhost')) {
+    baseUrl = req.headers.origin;
+  }
+  
+  logger.info('Using Google Analytics callback base URL:', baseUrl);
+  return `${baseUrl}/api/analytics/auth/callback`;
+};
+
 // Get Google Analytics 4 auth status
 router.get('/analytics/auth/status', isAuthenticated, async (req, res) => {
   try {
@@ -2390,37 +2412,44 @@ router.get('/analytics/auth/status', isAuthenticated, async (req, res) => {
 // Start Google Analytics 4 OAuth flow
 router.get('/analytics/auth/google', isAuthenticated, (req, res) => {
   try {
-    // Generate a random state parameter for security
-    const state = Math.random().toString(36).substring(2, 15);
+    // Generate a more secure random state parameter
+    const state = crypto.randomBytes(16).toString('hex');
     
     // Save the state in the session to verify later
-    req.session.oauthState = state;
+    req.session.gaOauthState = state;
     
-    // Create the OAuth URL
-    const scopes = [
-      'https://www.googleapis.com/auth/analytics.readonly'
-    ];
-    
-    const redirectUri = `${process.env.BACKEND_URL}/api/analytics/auth/callback`;
-    
-    // Create the authorization URL
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-      `response_type=code&` +
-      `client_id=${encodeURIComponent(process.env.GOOGLE_CLIENT_ID)}&` +
-      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-      `scope=${encodeURIComponent(scopes.join(' '))}&` +
-      `access_type=offline&` +
-      `prompt=consent&` + // Force consent screen to get refresh token
-      `state=${encodeURIComponent(state)}`;
-    
-    logger.info('Starting GA4 OAuth flow for user:', {
-      userId: req.user._id,
-      redirectUri,
-      state,
-      scopes
+    // Ensure session is saved before continuing
+    req.session.save((err) => {
+      if (err) {
+        logger.error('Error saving session before GA auth:', err);
+      }
+      
+      // Create the OAuth URL
+      const scopes = [
+        'https://www.googleapis.com/auth/analytics.readonly'
+      ];
+      
+      const redirectUri = getGACallbackUrl(req);
+      
+      // Create the authorization URL
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `response_type=code&` +
+        `client_id=${encodeURIComponent(process.env.GOOGLE_CLIENT_ID)}&` +
+        `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+        `scope=${encodeURIComponent(scopes.join(' '))}&` +
+        `access_type=offline&` +
+        `prompt=consent&` + // Force consent screen to get refresh token
+        `state=${encodeURIComponent(state)}`;
+      
+      logger.info('Starting GA4 OAuth flow for user:', {
+        userId: req.user._id,
+        redirectUri,
+        state,
+        scopes
+      });
+      
+      res.redirect(authUrl);
     });
-    
-    res.redirect(authUrl);
   } catch (error) {
     logger.error('Error starting GA4 OAuth flow:', error);
     res.status(500).send(`
@@ -2440,10 +2469,16 @@ router.get('/analytics/auth/callback', isAuthenticated, async (req, res) => {
   try {
     const { code, state } = req.query;
     
+    logger.info('GA OAuth callback received:', { 
+      hasState: !!state,
+      hasCode: !!code,
+      sessionState: req.session.gaOauthState
+    });
+    
     // Check if the state matches to prevent CSRF attacks
-    if (state !== req.session.oauthState) {
-      logger.error('OAuth state mismatch - potential CSRF attack:', {
-        sessionState: req.session.oauthState,
+    if (!state || state !== req.session.gaOauthState) {
+      logger.error('GA OAuth state mismatch:', {
+        sessionState: req.session.gaOauthState,
         receivedState: state,
         userId: req.user._id
       });
@@ -2460,7 +2495,7 @@ router.get('/analytics/auth/callback', isAuthenticated, async (req, res) => {
     }
     
     // Clear the state from the session
-    req.session.oauthState = null;
+    req.session.gaOauthState = null;
     
     if (!code) {
       logger.error('No authorization code received in callback');
@@ -2476,7 +2511,7 @@ router.get('/analytics/auth/callback', isAuthenticated, async (req, res) => {
     }
     
     // Exchange the authorization code for tokens
-    const redirectUri = `${process.env.BACKEND_URL}/api/analytics/auth/callback`;
+    const redirectUri = getGACallbackUrl(req);
     
     const tokenResponse = await axios.post(
       'https://oauth2.googleapis.com/token',

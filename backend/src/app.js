@@ -24,8 +24,8 @@ app.use(morgan('combined'));
 // CORS configuration - IMPORTANT: This must be before session middleware
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL, 'https://bolt.vertodigital.com']
-    : ['http://localhost:3000'],
+    ? [process.env.FRONTEND_URL, 'https://bolt.vertodigital.com', 'https://vertodigital.com']
+    : ['http://localhost:3000', 'http://localhost:5001'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cookie'],
@@ -35,7 +35,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Trust proxy settings
+// Trust proxy settings - CRITICAL for secure cookies behind proxies
 app.set('trust proxy', 1);
 
 async function startServer() {
@@ -49,10 +49,20 @@ async function startServer() {
     startCleanupSchedule();
 
     // Session configuration - AFTER MongoDB connection
+    const cookieSettings = {
+      secure: process.env.NODE_ENV === 'production', // true in production
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      httpOnly: true,
+      path: '/'
+    };
+    
+    logger.info(`Session cookie settings: ${JSON.stringify(cookieSettings)}`);
+    
     app.use(session({
       secret: process.env.SESSION_SECRET || 'your-secret-key',
       resave: false,
-      saveUninitialized: false,
+      saveUninitialized: true, // Changed to true to ensure session is created for auth flows
       store: MongoStore.create({
         mongoUrl: process.env.MONGODB_URI,
         collectionName: "sessions",
@@ -63,13 +73,7 @@ async function startServer() {
           secret: process.env.SESSION_SECRET || 'your-secret-key'
         }
       }),
-      cookie: {
-        secure: process.env.NODE_ENV === 'production', // true in production
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        httpOnly: true,
-        path: '/'
-      }
+      cookie: cookieSettings
     }));
 
     // Initialize Passport AFTER session middleware
