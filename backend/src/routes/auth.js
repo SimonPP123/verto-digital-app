@@ -33,6 +33,25 @@ const getRedirectUrl = (req) => {
     }
   }
   
+  // Check host header for direct detection
+  const host = req.get('host');
+  if (host) {
+    // Build URL from host header
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    if (host.includes('vertodigital.com')) {
+      const origin = `${protocol}://${host}`;
+      logger.info(`Using origin from host header: ${origin}`);
+      return origin;
+    }
+  }
+  
+  // For production domains, prefer bolt.vertodigital.com
+  if (process.env.NODE_ENV === 'production') {
+    const productionUrl = 'https://bolt.vertodigital.com';
+    logger.info(`Using production URL: ${productionUrl}`);
+    return productionUrl;
+  }
+  
   // Fall back to the environment variable
   logger.info(`Using FRONTEND_URL from environment: ${process.env.FRONTEND_URL}`);
   return process.env.FRONTEND_URL;
@@ -68,11 +87,18 @@ router.get('/google', (req, res, next) => {
   logger.info(`Session ID: ${req.sessionID}`);
   
   // Save the origin in the session for the callback
+  let originSaved = false;
+  
+  // Try to get origin from headers
   const origin = req.get('origin');
   if (origin) {
     logger.info(`Saving origin for redirect: ${origin}`);
     req.session.authOrigin = origin;
-  } else {
+    originSaved = true;
+  }
+  
+  // Check referer header if no origin
+  if (!originSaved) {
     const referer = req.get('referer');
     if (referer) {
       try {
@@ -80,10 +106,31 @@ router.get('/google', (req, res, next) => {
         const refererOrigin = `${parsedUrl.protocol}//${parsedUrl.host}`;
         logger.info(`Saving referer origin for redirect: ${refererOrigin}`);
         req.session.authOrigin = refererOrigin;
+        originSaved = true;
       } catch (error) {
         logger.error(`Error parsing referer URL: ${referer}`, error);
       }
     }
+  }
+  
+  // Direct host check if still no origin
+  if (!originSaved) {
+    const host = req.get('host');
+    if (host) {
+      // Build URL from host header
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const hostOrigin = `${protocol}://${host}`;
+      logger.info(`Saving host origin for redirect: ${hostOrigin}`);
+      req.session.authOrigin = hostOrigin;
+      originSaved = true;
+    }
+  }
+  
+  // If we're in production and still no origin, use bolt.vertodigital.com
+  if (!originSaved && process.env.NODE_ENV === 'production') {
+    const productionUrl = 'https://bolt.vertodigital.com';
+    logger.info(`Using production URL for redirect: ${productionUrl}`);
+    req.session.authOrigin = productionUrl;
   }
   
   // Generate a secure state parameter to prevent CSRF

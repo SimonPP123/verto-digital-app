@@ -54,7 +54,8 @@ async function startServer() {
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       httpOnly: true,
-      path: '/'
+      path: '/',
+      domain: process.env.NODE_ENV === 'production' ? '.vertodigital.com' : undefined
     };
     
     logger.info(`Session cookie settings: ${JSON.stringify(cookieSettings)}`);
@@ -62,7 +63,7 @@ async function startServer() {
     app.use(session({
       secret: process.env.SESSION_SECRET || 'your-secret-key',
       resave: false,
-      saveUninitialized: true, // Changed to true to ensure session is created for auth flows
+      saveUninitialized: true, // Ensure session is created for auth flows
       store: MongoStore.create({
         mongoUrl: process.env.MONGODB_URI,
         collectionName: "sessions",
