@@ -1,54 +1,63 @@
 const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
 
-const assistantConversationSchema = new mongoose.Schema({
+const MessageSchema = new Schema({
+  role: {
+    type: String,
+    enum: ['user', 'assistant', 'system'],
+    required: true
+  },
+  content: {
+    type: String,
+    required: true
+  },
+  timestamp: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+const AgentSchema = new Schema({
+  name: {
+    type: String,
+    required: true,
+    default: 'BigQuery Agent'
+  },
+  webhookUrl: {
+    type: String,
+    default: ''
+  },
+  icon: {
+    type: String,
+    default: 'database'
+  },
+  description: {
+    type: String,
+    default: 'Default agent'
+  }
+});
+
+const AssistantConversationSchema = new Schema({
   conversationId: {
     type: String,
     required: true,
-    index: true
+    unique: true
   },
   title: {
     type: String,
-    default: 'New Conversation',
-    trim: true
+    default: 'New Conversation'
   },
   user: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  agent: {
-    name: {
-      type: String,
-      default: 'BigQuery Agent'
-    },
-    webhookUrl: {
-      type: String,
-      default: ''
-    },
-    icon: {
-      type: String,
-      default: 'database'
-    },
-    description: {
-      type: String,
-      default: 'Default BigQuery agent'
-    }
+  messages: [MessageSchema],
+  isArchived: {
+    type: Boolean,
+    default: false
   },
-  messages: [{
-    role: {
-      type: String,
-      enum: ['user', 'assistant', 'system'],
-      required: true
-    },
-    content: {
-      type: String,
-      required: true
-    },
-    timestamp: {
-      type: Date,
-      default: Date.now
-    }
-  }],
+  agent: AgentSchema,
   createdAt: {
     type: Date,
     default: Date.now
@@ -56,17 +65,9 @@ const assistantConversationSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now
-  },
-  isArchived: {
-    type: Boolean,
-    default: false
   }
+}, {
+  timestamps: true
 });
 
-// Pre-save hook to update the updatedAt timestamp
-assistantConversationSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
-});
-
-module.exports = mongoose.model('AssistantConversation', assistantConversationSchema); 
+module.exports = mongoose.model('AssistantConversation', AssistantConversationSchema); 

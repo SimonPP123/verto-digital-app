@@ -218,128 +218,155 @@ export default function AssistantInterface() {
     }
   };
 
-  const sendMessage = async (message: string, conversationId: string) => {
-    if (!message.trim()) return;
-    
+  // Add function to get GA4 auth token
+  const getGA4Token = async (): Promise<string | null> => {
     try {
+      const response = await fetch('/api/analytics/auth/status');
+      const data = await response.json();
+      
+      if (data.authenticated) {
+        return data.accessToken || null;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting GA4 token:', error);
+      return null;
+    }
+  };
+
+  // Update the sendMessage function to include GA4 token if needed
+  const sendMessage = async (messageContent: string) => {
+    try {
+      if (!currentConversation) {
+        // Handle case when no conversation is selected
+        setError('No active conversation. Please create or select a conversation first.');
+        return;
+      }
+
       setIsSendingMessage(true);
       setError(null);
-      
-      // Update UI immediately with the user message
-      const userMessage = {
-        role: 'user' as const,
-        content: message,
-        timestamp: new Date()
+
+      // Add the message to the UI immediately for a responsive feel
+      const userMessage: MessageType = {
+        role: 'user',
+        content: messageContent,
+        timestamp: new Date().toISOString()
       };
-      
-      // If we have a current conversation, add the message to it
-      if (currentConversation) {
-        setCurrentConversation(prevConversation => {
-          if (!prevConversation) return null;
-          
-          const updatedMessages = [...prevConversation.messages, userMessage];
-          return {
-            ...prevConversation,
-            messages: updatedMessages,
-            updatedAt: new Date().toISOString()
-          };
-        });
-      } else {
-        // Create a new conversation with the user message
-        const newConversation = {
-          conversationId,
-          title: 'New Conversation',
-          messages: [userMessage],
-          isArchived: false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+
+      // Update UI instantly for better UX
+      setCurrentConversation(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          messages: [...prev.messages, userMessage]
         };
-        
-        setCurrentConversation(newConversation);
-        setConversations(prevConversations => [newConversation, ...prevConversations]);
+      });
+
+      // Prepare the request
+      const isGoogleAnalyticsAgent = currentConversation.agent?.name === 'Google Analytics 4';
+      let webhookUrl = currentConversation.agent?.webhookUrl;
+      let ga4Token = null;
+
+      // If using GA4 agent, get the auth token
+      if (isGoogleAnalyticsAgent) {
+        try {
+          ga4Token = await getGA4Token();
+          
+          if (!ga4Token) {
+            console.log('No GA4 token available, using internal query endpoint');
+            // If no token, use the query endpoint which handles auth internally
+            webhookUrl = '/api/analytics/query';
+          } else {
+            console.log('GA4 token available for request');
+          }
+        } catch (authError) {
+          console.error('Error getting GA4 token:', authError);
+          // If there's an error getting the token, still try using the query endpoint
+          webhookUrl = '/api/analytics/query';
+        }
       }
-      
-      // Send the message to the API
+
+      // Send to backend API
       const response = await fetch('/api/assistant/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          conversationId,
-          message
+          conversationId: currentConversation.conversationId,
+          message: messageContent,
+          webhookUrl,
+          ga4Token,
+          isGoogleAnalyticsAgent
         })
       });
-      
+
+      const responseText = await response.text();
       let data;
+      
       try {
-        data = await response.json();
-      } catch (jsonError) {
-        console.error('Error parsing JSON response:', jsonError);
-        const responseText = await response.text();
-        throw new Error(`Invalid response format: ${responseText.substring(0, 100)}...`);
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error('Failed to parse server response:', responseText);
+        throw new Error(`Failed to parse server response: ${responseText.substring(0, 100)}...`);
+      }
+
+      // Even with a 500 status, we might get a valid JSON response with conversation updates
+      if (data.updatedConversation) {
+        // Update the conversation with the server data, even if there was an error
+        setCurrentConversation(data.updatedConversation);
+        
+        // Also update the conversation in the list
+        setConversations(prevConversations => {
+          return prevConversations.map(conv => 
+            conv.conversationId === data.updatedConversation.conversationId
+              ? data.updatedConversation
+              : conv
+          );
+        });
+        
+        // We've already handled updating the UI, so we can return early
+        setIsSendingMessage(false);
+        
+        // If this was a Google Analytics authentication error, provide a specific error message
+        if (data.message && data.message.includes('Not authenticated with Google Analytics')) {
+          setError('Google Analytics authentication required. Please authenticate and try again.');
+          
+          // Optionally, show the auth modal again
+          // This would require passing a function to open the auth modal from the parent component
+          return;
+        }
+        
+        if (!response.ok) {
+          // This is a handled error - the assistant has already responded in the conversation
+          // We don't need to show a general error since the assistant response explains the issue
+          return;
+        }
+      } else if (!response.ok) {
+        // For other errors without an updated conversation
+        throw new Error(`Failed to send message (${response.status}): ${data.error || data.message || responseText}`);
+      }
+
+      if (!data.success) {
+        throw new Error(data.message || data.error || 'Failed to send message');
       }
       
-      if (data.success) {
-        // Add the assistant response to the current conversation
-        const assistantMessage = {
-          role: 'assistant' as const,
-          content: data.response,
-          timestamp: new Date()
-        };
-        
-        setCurrentConversation(prevConversation => {
-          if (!prevConversation) return null;
-          
-          const updatedMessages = [...prevConversation.messages, assistantMessage];
-          return {
-            ...prevConversation,
-            messages: updatedMessages,
-            updatedAt: new Date().toISOString()
-          };
-        });
-        
-        // Update the conversations list
-        setConversations(prevConversations => {
-          const conversationIndex = prevConversations.findIndex(c => c.conversationId === conversationId);
-          
-          if (conversationIndex >= 0) {
-            const updatedConversations = [...prevConversations];
-            updatedConversations[conversationIndex] = {
-              ...updatedConversations[conversationIndex],
-              updatedAt: new Date().toISOString()
-            };
-            return updatedConversations;
-          }
-          
-          return prevConversations;
-        });
-      } else {
-        // Handle error response
-        throw new Error(data.error || 'Failed to get response');
-      }
     } catch (error) {
       console.error('Error sending message:', error);
-      
-      // Add error message to the conversation
-      const errorMessage = {
-        role: 'assistant' as const,
-        content: `Error: ${error instanceof Error ? error.message : 'An error occurred'}. Please try again later.`,
-        timestamp: new Date()
-      };
-      
-      setCurrentConversation(prevConversation => {
-        if (!prevConversation) return null;
-        
-        const updatedMessages = [...prevConversation.messages, errorMessage];
-        return {
-          ...prevConversation,
-          messages: updatedMessages,
-          updatedAt: new Date().toISOString()
-        };
-      });
-      
       setError('Failed to send message. Please try again later.');
+      
+      // Remove the user message if sending failed and no server response was handled
+      setCurrentConversation(prev => {
+        if (!prev) return null;
+        // Only remove if we haven't already updated with a server response
+        if (prev.messages.length > 0 && prev.messages[prev.messages.length - 1].role === 'user') {
+          return {
+            ...prev,
+            messages: prev.messages.slice(0, -1)
+          };
+        }
+        return prev;
+      });
     } finally {
       setIsSendingMessage(false);
     }
@@ -510,7 +537,7 @@ export default function AssistantInterface() {
         setShowTemplateVarsModal(true);
       } else {
         // Template has no variables, use as is
-        sendMessage(template.content, targetConversation.conversationId);
+        sendMessage(template.content);
       }
     } catch (error) {
       console.error('Error using template:', error);
@@ -531,7 +558,7 @@ export default function AssistantInterface() {
     });
     
     // Send message and close modal
-    sendMessage(messageContent, currentConversation.conversationId);
+    sendMessage(messageContent);
     setShowTemplateVarsModal(false);
     setCurrentTemplate(null);
   };
@@ -770,7 +797,7 @@ export default function AssistantInterface() {
             {/* Chat input */}
             <div className="p-4 border-t border-gray-200">
               <MessageControls 
-                onSendMessage={(message) => sendMessage(message, currentConversation.conversationId)}
+                onSendMessage={(message) => sendMessage(message)}
                 isSending={isSendingMessage}
               />
             </div>

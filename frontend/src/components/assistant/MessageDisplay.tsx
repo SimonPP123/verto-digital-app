@@ -16,9 +16,9 @@ export default function MessageDisplay({ message }: MessageProps) {
     ? new Date(message.timestamp) 
     : message.timestamp;
   
-  // Helper function to render content with code blocks and tables
+  // Helper function to render content with markdown elements
   const renderContent = (content: string) => {
-    // First, split by code blocks (```code```)
+    // Split by code blocks first
     const parts = content.split(/(```[\s\S]*?```)/g);
     
     return parts.map((part, index) => {
@@ -52,123 +52,233 @@ export default function MessageDisplay({ message }: MessageProps) {
         );
       }
       
-      // Check if this part contains an ASCII table (with +---+---+ format)
-      if (part.includes('+--') && part.includes('\n+')) {
-        const lines = part.split('\n');
-        
-        // Filter out the rows that are just borders (contain only +, -, |)
-        const borderRows = lines.filter(line => 
-          line.trim().startsWith('+') && 
-          line.trim().endsWith('+') && 
-          /^[+\-|]+$/.test(line.trim())
-        );
-        
-        // Get data rows (rows between the borders)
-        const dataRows = lines.filter(line => 
-          line.trim().startsWith('|') && 
-          line.trim().endsWith('|') && 
-          !borderRows.includes(line)
-        );
-        
-        if (dataRows.length > 0) {
-          // Extract other text content (not part of the table)
-          const nonTableContent = lines.filter(line => 
-            !line.trim().startsWith('+') && 
-            !line.trim().startsWith('|')
-          ).join('\n');
-          
-          return (
-            <React.Fragment key={index}>
-              {nonTableContent && (
-                <div className="whitespace-pre-wrap mb-3">
-                  {nonTableContent.split('\n').map((line, i) => (
-                    <React.Fragment key={i}>
-                      {line}
-                      {i < nonTableContent.split('\n').length - 1 && <br />}
-                    </React.Fragment>
-                  ))}
-                </div>
-              )}
-              <div className="overflow-x-auto mb-3 max-w-full">
-                <table className="min-w-full border-collapse border border-gray-300">
-                  <tbody>
-                    {dataRows.map((row, i) => (
-                      <tr key={i} className={i === 0 ? "bg-gray-100" : ""}>
-                        {row.split('|').filter(Boolean).map((cell, j) => {
-                          if (i === 0) {
-                            return <th key={j} className="px-4 py-2 text-left border border-gray-300">{cell.trim()}</th>;
-                          }
-                          return <td key={j} className="px-4 py-2 border border-gray-300">{cell.trim()}</td>;
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </React.Fragment>
-          );
-        }
-      }
-      
-      // Check if this part contains a Markdown table
-      else if (part.includes('|') && part.includes('\n|')) {
-        const lines = part.split('\n');
-        const tableLines = lines.filter(line => line.trim().startsWith('|') && line.trim().endsWith('|'));
-        
-        if (tableLines.length >= 2) {
-          // This looks like a Markdown table
-          const tableContent = tableLines.join('\n');
-          const nonTableContent = lines.filter(line => !line.trim().startsWith('|') || !line.trim().endsWith('|')).join('\n');
-          
-          return (
-            <React.Fragment key={index}>
-              {nonTableContent && (
-                <div className="whitespace-pre-wrap mb-3">
-                  {nonTableContent.split('\n').map((line, i) => (
-                    <React.Fragment key={i}>
-                      {line}
-                      {i < nonTableContent.split('\n').length - 1 && <br />}
-                    </React.Fragment>
-                  ))}
-                </div>
-              )}
-              <div className="overflow-x-auto mb-3 max-w-full">
-                <table className="min-w-full border-collapse">
-                  <tbody>
-                    {tableLines.map((line, i) => (
-                      <tr key={i} className={i === 1 ? "border-t border-b" : ""}>
-                        {line.split('|').filter(Boolean).map((cell, j) => {
-                          if (i === 0) {
-                            return <th key={j} className="px-4 py-2 text-left">{cell.trim()}</th>;
-                          }
-                          // Skip the separator row (row with dashes)
-                          if (i === 1 && line.includes('----')) {
-                            return null;
-                          }
-                          return <td key={j} className="px-4 py-2 border-t">{cell.trim()}</td>;
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </React.Fragment>
-          );
-        }
-      }
-      
-      // Regular text - render paragraphs
-      return (
-        <div key={index} className="whitespace-pre-wrap">
-          {part.split('\n').map((line, i) => (
-            <React.Fragment key={i}>
-              {line}
-              {i < part.split('\n').length - 1 && <br />}
-            </React.Fragment>
-          ))}
-        </div>
-      );
+      // Process the regular text part (non-code blocks)
+      return processTextContent(part, index);
     });
+  };
+  
+  // Helper function to process regular text content with markdown elements
+  const processTextContent = (content: string, blockIndex: number) => {
+    const lines = content.split('\n');
+    const result: React.ReactNode[] = [];
+    let currentParagraph: string[] = [];
+    let inTable = false;
+    let tableRows: string[] = [];
+    
+    const flushParagraph = () => {
+      if (currentParagraph.length > 0) {
+        result.push(
+          <p key={`p-${blockIndex}-${result.length}`} className="mb-3">
+            {currentParagraph.map((line, i) => (
+              <React.Fragment key={i}>
+                {processInlineMarkdown(line)}
+                {i < currentParagraph.length - 1 && <br />}
+              </React.Fragment>
+            ))}
+          </p>
+        );
+        currentParagraph = [];
+      }
+    };
+    
+    const flushTable = () => {
+      if (tableRows.length > 0) {
+        // Detect if it's a markdown table
+        const isMarkdownTable = tableRows.some(row => row.includes('|---'));
+        
+        result.push(renderTable(tableRows, blockIndex, isMarkdownTable));
+        tableRows = [];
+        inTable = false;
+      }
+    };
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmedLine = line.trim();
+      
+      // Check for headers
+      if (trimmedLine.startsWith('# ')) {
+        flushParagraph();
+        flushTable();
+        result.push(
+          <h1 key={`h1-${blockIndex}-${i}`} className="text-2xl font-bold mb-3 mt-4">
+            {processInlineMarkdown(trimmedLine.substring(2))}
+          </h1>
+        );
+      } else if (trimmedLine.startsWith('## ')) {
+        flushParagraph();
+        flushTable();
+        result.push(
+          <h2 key={`h2-${blockIndex}-${i}`} className="text-xl font-bold mb-2 mt-3">
+            {processInlineMarkdown(trimmedLine.substring(3))}
+          </h2>
+        );
+      } else if (trimmedLine.startsWith('### ')) {
+        flushParagraph();
+        flushTable();
+        result.push(
+          <h3 key={`h3-${blockIndex}-${i}`} className="text-lg font-bold mb-2 mt-3">
+            {processInlineMarkdown(trimmedLine.substring(4))}
+          </h3>
+        );
+      } else if (trimmedLine.startsWith('#### ')) {
+        flushParagraph();
+        flushTable();
+        result.push(
+          <h4 key={`h4-${blockIndex}-${i}`} className="text-md font-bold mb-1 mt-2">
+            {processInlineMarkdown(trimmedLine.substring(5))}
+          </h4>
+        );
+      }
+      // Check for lists
+      else if (trimmedLine.match(/^(\d+\.|[-*+])\s/)) {
+        flushParagraph();
+        flushTable();
+        
+        const isOrderedList = /^\d+\./.test(trimmedLine);
+        const listItems: string[] = [];
+        let j = i;
+        
+        while (j < lines.length && lines[j].trim().match(/^(\d+\.|[-*+])\s/)) {
+          const itemContent = lines[j].trim().replace(/^(\d+\.|[-*+])\s/, '');
+          listItems.push(itemContent);
+          j++;
+        }
+        
+        if (isOrderedList) {
+          result.push(
+            <ol key={`ol-${blockIndex}-${i}`} className="list-decimal pl-5 mb-3">
+              {listItems.map((item, idx) => (
+                <li key={idx} className="mb-1">{processInlineMarkdown(item)}</li>
+              ))}
+            </ol>
+          );
+        } else {
+          result.push(
+            <ul key={`ul-${blockIndex}-${i}`} className="list-disc pl-5 mb-3">
+              {listItems.map((item, idx) => (
+                <li key={idx} className="mb-1">{processInlineMarkdown(item)}</li>
+              ))}
+            </ul>
+          );
+        }
+        
+        i = j - 1; // Skip processed lines
+      }
+      // Check for table (starts with | and ends with |)
+      else if (trimmedLine.startsWith('|') && trimmedLine.endsWith('|')) {
+        if (!inTable) {
+          flushParagraph();
+          inTable = true;
+        }
+        tableRows.push(trimmedLine);
+      }
+      // Empty line marks the end of a paragraph or table
+      else if (trimmedLine === '') {
+        if (inTable) {
+          flushTable();
+        } else {
+          flushParagraph();
+        }
+      }
+      // Regular text line
+      else {
+        if (inTable) {
+          flushTable();
+        }
+        currentParagraph.push(line);
+      }
+    }
+    
+    // Flush any remaining content
+    flushTable();
+    flushParagraph();
+    
+    return <div key={`block-${blockIndex}`}>{result}</div>;
+  };
+  
+  // Process inline markdown (bold, italic, etc.)
+  const processInlineMarkdown = (text: string) => {
+    // Replace ** or __ with bold
+    let processed = text.replace(/(\*\*|__)(.*?)\1/g, '<strong>$2</strong>');
+    
+    // Replace * or _ with italic
+    processed = processed.replace(/(\*|_)(.*?)\1/g, '<em>$2</em>');
+    
+    // Replace ` with inline code
+    processed = processed.replace(/`(.*?)`/g, '<code>$1</code>');
+    
+    // If any HTML tags were inserted, we need to render with dangerouslySetInnerHTML
+    if (processed !== text) {
+      return <span dangerouslySetInnerHTML={{ __html: processed }} />;
+    }
+    
+    return text;
+  };
+  
+  // Render a table from markdown-style or ASCII-style tables
+  const renderTable = (tableRows: string[], blockIndex: number, isMarkdownStyle: boolean) => {
+    // For markdown tables, remove separator row (contains only |, -, and spaces)
+    let dataRows = isMarkdownStyle 
+      ? tableRows.filter(row => !row.match(/^\|[\s\-\|]*\|$/))
+      : tableRows;
+    
+    // Get column alignment information if it's a markdown table
+    let alignments: ('left' | 'center' | 'right')[] = [];
+    if (isMarkdownStyle) {
+      const separatorRow = tableRows.find(row => row.match(/^\|[\s\-\|]*\|$/));
+      if (separatorRow) {
+        alignments = separatorRow.split('|').filter(Boolean).map(cell => {
+          const trimmedCell = cell.trim();
+          if (trimmedCell.startsWith(':') && trimmedCell.endsWith(':')) return 'center';
+          if (trimmedCell.endsWith(':')) return 'right';
+          return 'left';
+        });
+      }
+    }
+    
+    return (
+      <div key={`table-container-${blockIndex}`} className="overflow-x-auto my-4 max-w-full">
+        <table className="min-w-full border-collapse border border-gray-300">
+          <tbody>
+            {dataRows.map((row, rowIdx) => {
+              const cells = row.split('|').filter(Boolean).map(cell => cell.trim());
+              const isHeader = rowIdx === 0;
+              
+              return (
+                <tr 
+                  key={rowIdx} 
+                  className={isHeader ? "bg-gray-100" : rowIdx % 2 === 0 ? "bg-gray-50" : ""}
+                >
+                  {cells.map((cell, cellIdx) => {
+                    const align = alignments[cellIdx] || 'left';
+                    const style = { textAlign: align };
+                    
+                    return isHeader ? (
+                      <th 
+                        key={cellIdx} 
+                        className="px-4 py-2 border border-gray-300 font-medium"
+                        style={style as React.CSSProperties}
+                      >
+                        {processInlineMarkdown(cell)}
+                      </th>
+                    ) : (
+                      <td 
+                        key={cellIdx} 
+                        className="px-4 py-2 border border-gray-300"
+                        style={style as React.CSSProperties}
+                      >
+                        {processInlineMarkdown(cell)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
   };
   
   return (

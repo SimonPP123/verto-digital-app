@@ -8,6 +8,7 @@ const AssistantTemplate = require('../../models/AssistantTemplate');
 const assistantConversationSchema = require('../../schemas/assistantConversationSchema');
 const assistantTemplateSchema = require('../../schemas/assistantTemplateSchema');
 const { availableAgents } = require('../../config/agents');
+const { processAnalyticsQuery } = require('../../utils/analyticsHelper');
 
 // Middleware to check if user is authenticated
 const isAuthenticated = (req, res, next) => {
@@ -161,34 +162,55 @@ router.get('/agents', isAuthenticated, async (req, res) => {
   }
 });
 
-// Send a message to the webhook and get a response
+// Modify the send message endpoint to handle GA4 authentication
 router.post('/send', isAuthenticated, async (req, res) => {
   try {
-    const { conversationId, message } = req.body;
+    const { conversationId, message, webhookUrl, ga4Token, isGoogleAnalyticsAgent } = req.body;
     
     if (!conversationId || !message) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Conversation ID and message are required' 
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields'
       });
     }
     
-    // Get the current conversation or create a new one
-    let conversation = await AssistantConversation.findOne({ 
-      conversationId,
-      user: req.user._id 
+    // Fetch the conversation to get the agent webhook URL if not provided
+    let conversation = await AssistantConversation.findOne({
+      user: req.user._id,
+      conversationId
     });
     
     if (!conversation) {
-      conversation = new AssistantConversation({
-        conversationId,
-        title: 'New Conversation',
-        user: req.user._id,
-        messages: []
+      return res.status(404).json({
+        success: false,
+        error: 'Conversation not found'
       });
     }
     
-    // Add user message to the conversation
+    // Determine the webhook URL to use
+    let targetWebhookUrl = webhookUrl;
+    
+    // If no webhook URL provided, try to get it from the conversation
+    if (!targetWebhookUrl && conversation.agent?.webhookUrl) {
+      targetWebhookUrl = conversation.agent.webhookUrl;
+    }
+    
+    // If still no webhook URL, use the default from environment variables
+    if (!targetWebhookUrl) {
+      targetWebhookUrl = process.env.N8N_DEFAULT_ASSISTANT_WEBHOOK;
+    }
+    
+    // If no webhook URL available, return error
+    if (!targetWebhookUrl) {
+      return res.status(400).json({
+        success: false,
+        error: 'No webhook URL available for this conversation'
+      });
+    }
+    
+    logger.info(`Sending message to webhook: ${targetWebhookUrl} for conversation: ${conversationId}`);
+    
+    // Add the user message to the conversation
     const userMessage = {
       role: 'user',
       content: message,
@@ -196,135 +218,176 @@ router.post('/send', isAuthenticated, async (req, res) => {
     };
     
     conversation.messages.push(userMessage);
+    conversation.updatedAt = new Date();
     await conversation.save();
     
-    // Use the agent's webhook URL if available, or fall back to the default
-    const webhookEndpoint = conversation.agent?.webhookUrl || process.env.N8N_BIGQUERY || 'https://nn.vertodigital.com:5678/webhook/ampeco-bigquery';
-    
-    logger.info(`Sending message to webhook: ${webhookEndpoint}`);
-    
-    // Set a timeout of 3 minutes (180000 ms)
-    const timeoutDuration = 180000;
+    // Use AbortController to set a timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
+    const timeoutId = setTimeout(() => controller.abort(), 3 * 60 * 1000); // 3 minute timeout
+    
+    // Prepare webhook request payload
+    let requestPayload = {
+      conversationId,
+      message,
+      userId: req.user._id,
+      userName: req.user.name,
+      userEmail: req.user.email
+    };
+    
+    // Add conversation history if available
+    if (conversation.messages.length > 0) {
+      requestPayload.history = conversation.messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+    }
     
     try {
-      const webhookResponse = await axios.post(
-        webhookEndpoint, 
-        { 
-          message, 
-          conversationId, 
-          userId: req.user._id, 
-          messageNumber: conversation.messages.filter(msg => msg.role === 'user').length,
-          agent: conversation.agent?.name || 'BigQuery Agent'
-        }, 
-        { 
-          signal: controller.signal,
-          timeout: timeoutDuration,
-          validateStatus: status => true // Accept any status code to handle errors ourselves
+      let responseData;
+      
+      // Special handling for GA4 agent with internal endpoint
+      if (isGoogleAnalyticsAgent && targetWebhookUrl === '/api/analytics/query') {
+        logger.info('Processing Google Analytics 4 query directly');
+        
+        // Use direct function call instead of HTTP request
+        responseData = await processAnalyticsQuery({
+          ...requestPayload,
+          accessToken: ga4Token
+        });
+      } else {
+        // For all other cases, continue with normal webhook request
+        
+        // If this is a Google Analytics 4 agent and we have a token, include it
+        if (isGoogleAnalyticsAgent && ga4Token) {
+          requestPayload.accessToken = ga4Token;
         }
-      );
+        
+        // Ensure webhook URL is absolute
+        if (targetWebhookUrl.startsWith('/')) {
+          targetWebhookUrl = `${process.env.BACKEND_URL}${targetWebhookUrl}`;
+          logger.info(`Converted relative webhook URL to absolute: ${targetWebhookUrl}`);
+        }
       
-      clearTimeout(timeoutId); // Clear the timeout
-      
-      // Check for non-200 status codes
-      if (webhookResponse.status !== 200) {
-        throw {
-          response: {
-            status: webhookResponse.status,
+        // Send the message to the webhook
+        const webhookResponse = await fetch(targetWebhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(requestPayload),
+          signal: controller.signal
+        });
+        
+        if (!webhookResponse.ok) {
+          const errorText = await webhookResponse.text();
+          logger.error(`Webhook responded with status: ${webhookResponse.status}`, {
             statusText: webhookResponse.statusText,
-            data: {
-              message: typeof webhookResponse.data === 'string' 
-                ? webhookResponse.data 
-                : 'Non-200 status code received from webhook'
-            }
-          }
-        };
-      }
-      
-      // Extract the assistant's response from the webhook response
-      let responseContent = 'Sorry, I received an empty response.';
-      
-      // Check if the response is valid
-      if (typeof webhookResponse.data === 'string') {
-        // String response - use directly
-        responseContent = webhookResponse.data;
-      }
-      // Check if the response is an array with at least one item
-      else if (Array.isArray(webhookResponse.data) && webhookResponse.data.length > 0) {
-        // Check if the first item has an output field
-        if (webhookResponse.data[0].output) {
-          responseContent = webhookResponse.data[0].output;
+            errorText,
+            targetWebhookUrl
+          });
+          throw new Error(`Webhook responded with status: ${webhookResponse.status} - ${errorText}`);
         }
-      } 
-      // Also check for the response field format as a fallback
-      else if (webhookResponse.data && webhookResponse.data.response) {
-        responseContent = webhookResponse.data.response;
+        
+        responseData = await webhookResponse.json();
       }
       
-      // Add assistant response to the conversation
+      clearTimeout(timeoutId);
+      
+      // Add the assistant response to the conversation
       const assistantMessage = {
         role: 'assistant',
-        content: responseContent,
+        content: extractResponseContent(responseData),
         timestamp: new Date()
       };
       
       conversation.messages.push(assistantMessage);
+      conversation.updatedAt = new Date();
       await conversation.save();
       
-      res.json({ 
-        success: true, 
+      // Return the response to the client
+      return res.json({
+        success: true,
         response: assistantMessage.content,
-        conversationId: conversation.conversationId
+        updatedConversation: conversation
       });
     } catch (webhookError) {
       clearTimeout(timeoutId);
       
-      // Handle timeout or other webhook errors
-      logger.error('Webhook error:', webhookError);
+      // Handle webhook-specific errors
+      logger.error('Webhook request error:', webhookError);
       
-      let errorMessage = 'An error occurred while processing your request.';
-      let errorDetails = '';
-      
-      if (webhookError.code === 'ECONNABORTED' || webhookError.name === 'AbortError') {
-        errorMessage = 'Request timed out after 3 minutes. Please try again.';
-        errorDetails = 'The webhook took too long to respond.';
-      } else if (webhookError.response) {
-        errorMessage = `Error: ${webhookError.response.status} ${webhookError.response.statusText}`;
-        errorDetails = webhookError.response.data?.message || 'No additional details provided by the server.';
-      } else if (webhookError.request) {
-        errorMessage = 'No response received from the server.';
-        errorDetails = 'The request was made but no response was received.';
-      } else {
-        errorDetails = webhookError.message;
-      }
-      
-      // Add error message to the conversation
-      const errorAssistantMessage = {
+      // Add an error message to the conversation
+      const errorMessage = {
         role: 'assistant',
-        content: `${errorMessage} Please try again later.`,
+        content: `I'm sorry, I encountered an error while processing your request. ${webhookError.message}`,
         timestamp: new Date()
       };
       
-      conversation.messages.push(errorAssistantMessage);
+      conversation.messages.push(errorMessage);
+      conversation.updatedAt = new Date();
       await conversation.save();
       
-      res.status(500).json({ 
-        success: false, 
-        error: errorMessage,
-        details: errorDetails,
-        conversationId: conversation.conversationId
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to process message via webhook',
+        message: webhookError.message,
+        updatedConversation: conversation
       });
     }
   } catch (error) {
-    logger.error('Error in send message route:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Internal server error',
-      message: error.message 
+    logger.error('Error in assistant message endpoint:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to process message',
+      message: error.message
     });
   }
 });
+
+/**
+ * Extracts content from various response formats
+ * @param {Object|Array} responseData - The response data from the webhook
+ * @returns {string} - The extracted content
+ */
+function extractResponseContent(responseData) {
+  // If it's a simple string, return it
+  if (typeof responseData === 'string') {
+    return responseData;
+  }
+  
+  // If it's an array with objects that have an 'output' field (GA4 format)
+  if (Array.isArray(responseData) && responseData.length > 0) {
+    const firstItem = responseData[0];
+    if (firstItem && typeof firstItem === 'object') {
+      if (firstItem.output) return firstItem.output;
+      if (firstItem.response) return firstItem.response;
+      if (firstItem.content) return firstItem.content;
+    }
+    // If it's an array of strings or simple values, join them
+    return responseData.map(item => 
+      typeof item === 'object' ? JSON.stringify(item) : String(item)
+    ).join('\n');
+  }
+  
+  // If it's an object, look for common response fields
+  if (responseData && typeof responseData === 'object') {
+    if (responseData.response) return responseData.response;
+    if (responseData.content) return responseData.content;
+    if (responseData.output) return responseData.output;
+    if (responseData.text) return responseData.text;
+    if (responseData.message) return responseData.message;
+    
+    // If no common fields found, stringify the object
+    try {
+      return JSON.stringify(responseData, null, 2);
+    } catch (e) {
+      logger.error('Error stringifying response data:', e);
+    }
+  }
+  
+  // Fallback if nothing is found
+  return 'No response content';
+}
 
 // Rename a conversation session
 router.patch('/conversations/:conversationId/rename', isAuthenticated, async (req, res) => {

@@ -1,0 +1,530 @@
+# Google Analytics 4 Authentication with n8n: Step-by-Step Guide
+
+## Introduction
+
+This guide explains how to implement authentication for a Google Analytics 4 agent that allows users to connect their Google Analytics accounts to n8n workflows for data analysis. We'll implement frontend authentication that sends credentials to n8n for processing analytics requests.
+
+## Prerequisites
+
+- A Google Cloud account
+- Access to n8n (self-hosted or cloud)
+- Basic understanding of API authentication flows
+- A web application to host the user interface
+
+## Step 1: Create a Google Cloud Project
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com)
+2. Click "Select a project" at the top of the page
+3. Click "NEW PROJECT" in the popup window
+4. Enter a name for your project and click "CREATE"
+5. Wait for the project to be created and select it
+
+## Step 2: Enable the Google Analytics API
+
+1. From your Google Cloud project dashboard, navigate to "APIs & Services" > "Library"
+2. Search for "Google Analytics Data API" (for GA4)
+3. Click on it and press "ENABLE"
+4. Return to the library and also enable "Google Analytics Admin API" (for account management)
+5. Optional: Enable "Google Analytics Reporting API" (for additional legacy reporting features)
+
+## Step 3: Configure the OAuth Consent Screen
+
+1. Go to "APIs & Services" > "OAuth consent screen"
+2. Select "External" as the user type (or "Internal" if only for your organization)
+3. Complete the required fields:
+   - App name
+   - User support email
+   - Developer contact information
+4. Click "SAVE AND CONTINUE"
+5. Add the necessary scopes for Google Analytics:
+   - `https://www.googleapis.com/auth/analytics.readonly` (for reading data)
+   - `https://www.googleapis.com/auth/analytics` (for full access if needed)
+6. Click "SAVE AND CONTINUE"
+7. Add test users (your email or others who need immediate access)
+8. Click "SAVE AND CONTINUE" and then "BACK TO DASHBOARD"
+
+## Step 4: Create OAuth Credentials for Frontend Authentication
+
+1. Go to "APIs & Services" > "Credentials"
+2. Click "CREATE CREDENTIALS" and select "OAuth client ID"
+3. For Application type, select "Web application"
+4. Name your OAuth client
+5. Add Authorized JavaScript origins:
+   - Add your frontend application URL (e.g., `https://your-app-domain.com`)
+   - For local testing, add `http://localhost:3000`
+6. Add Authorized redirect URIs:
+   - Add your frontend callback URL (e.g., `https://your-app-domain.com/auth/callback`)
+   - For local testing: `http://localhost:3000/auth/callback`
+7. Click "CREATE"
+8. Note down the Client ID and Client Secret displayed (you'll need these for your frontend app)
+
+## Step 5: Configure n8n to Receive Frontend Authentication
+
+1. Open your n8n instance
+2. Create a new workflow that will accept incoming authentication credentials
+3. Add an HTTP Trigger node:
+   - Authentication: None (we'll handle auth in code)
+   - Method: POST
+   - Path: `/analytics-auth`
+   - Respond: Yes
+4. Add a Function node to process the incoming authentication:
+   ```javascript
+   // Store token in workflow variable or database
+   const tokenData = $input.body.tokenData;
+   const userId = $input.body.userId;
+   
+   // You can store tokens in a database or use workflow variables
+   $workflow.variables.tokens = $workflow.variables.tokens || {};
+   $workflow.variables.tokens[userId] = tokenData;
+   
+   return { success: true };
+   ```
+5. Connect the HTTP Trigger to the Function node
+6. Add a Set node to format the response:
+   ```
+   {
+     "success": true
+   }
+   ```
+7. Save the workflow and activate it
+
+## Step 6: Create an n8n Workflow for Google Analytics Requests
+
+1. Create a new workflow in n8n for handling analytics requests
+2. Add an HTTP Trigger node:
+   - Authentication: None (we'll handle auth in code)
+   - Method: POST
+   - Path: `/analytics-data` 
+   - Respond: Yes
+3. Add a Function node to process the incoming request with the user ID and request details:
+   ```javascript
+   const userId = $input.body.userId;
+   const request = $input.body.request;
+   
+   // Get the token from our storage
+   const accessToken = $workflow.variables.tokens[userId];
+   
+   if (!accessToken) {
+     return { error: 'No authentication token found for this user' };
+   }
+   
+   return {
+     userId,
+     accessToken,
+     request
+   };
+   ```
+4. Add an HTTP Request node:
+   - Method: POST
+   - URL: `https://analyticsdata.googleapis.com/v1beta/properties/{{$json.request.propertyId}}:runReport`
+   - Headers:
+     ```
+     {
+       "Authorization": "Bearer {{$json.accessToken.access_token}}",
+       "Content-Type": "application/json"
+     }
+     ```
+   - Body: `{{$json.request.body}}`
+5. Add a Set node to format the response and connect all nodes
+6. Save and activate the workflow
+
+## Step 7: Build Your Web Interface with Direct Authentication
+
+Create a frontend interface that handles Google OAuth directly:
+
+1. Create an authentication service that manages Google OAuth flow:
+
+```javascript
+// services/googleAuth.js
+import { GoogleAuth } from 'google-auth-library';
+
+// Configuration from your Google Cloud Project
+const clientId = 'YOUR_CLIENT_ID';
+const redirectUri = 'http://localhost:3000/auth/callback';
+const scope = 'https://www.googleapis.com/auth/analytics.readonly';
+
+// Create a Google OAuth URL
+export const getGoogleOAuthURL = () => {
+  const url = new URL('https://accounts.google.com/o/oauth2/auth');
+  
+  url.searchParams.append('client_id', clientId);
+  url.searchParams.append('redirect_uri', redirectUri);
+  url.searchParams.append('response_type', 'code');
+  url.searchParams.append('scope', scope);
+  url.searchParams.append('access_type', 'offline');
+  url.searchParams.append('prompt', 'consent');
+  
+  return url.toString();
+};
+
+// Exchange auth code for tokens
+export const getTokensFromCode = async (code) => {
+  try {
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: 'YOUR_CLIENT_SECRET', // Be careful with this in frontend!
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }),
+    });
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error getting tokens:', error);
+    throw error;
+  }
+};
+
+// Send tokens to n8n for storage
+export const sendTokensToN8n = async (tokenData, userId) => {
+  try {
+    const response = await fetch('https://your-n8n-instance/webhook/analytics-auth', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        tokenData,
+        userId,
+      }),
+    });
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error sending tokens to n8n:', error);
+    throw error;
+  }
+};
+
+// Make analytics request via n8n
+export const fetchAnalyticsData = async (userId, propertyId, requestBody) => {
+  try {
+    const response = await fetch('https://your-n8n-instance/webhook/analytics-data', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId,
+        request: {
+          propertyId,
+          body: requestBody,
+        },
+      }),
+    });
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching analytics data:', error);
+    throw error;
+  }
+};
+```
+
+2. Create a login button component:
+
+```javascript
+// components/GoogleLoginButton.jsx
+import React from 'react';
+import { getGoogleOAuthURL } from '../services/googleAuth';
+
+function GoogleLoginButton() {
+  const handleLogin = () => {
+    // Redirect to Google's OAuth consent screen
+    window.location.href = getGoogleOAuthURL();
+  };
+
+  return (
+    <button 
+      onClick={handleLogin}
+      className="flex items-center justify-center gap-2 bg-white border border-gray-300 rounded-md px-4 py-2 text-gray-700 hover:bg-gray-50"
+    >
+      <svg width="18" height="18" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+        {/* Google icon SVG */}
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg>
+      Sign in with Google
+    </button>
+  );
+}
+
+export default GoogleLoginButton;
+```
+
+3. Create a callback handler component/page:
+
+```javascript
+// pages/auth/callback.jsx
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
+import { getTokensFromCode, sendTokensToN8n } from '../../services/googleAuth';
+
+export default function AuthCallback() {
+  const router = useRouter();
+  const [status, setStatus] = useState('Processing authentication...');
+  
+  useEffect(() => {
+    const handleCallback = async () => {
+      const { code } = router.query;
+      
+      if (!code) return;
+      
+      try {
+        setStatus('Exchanging code for tokens...');
+        
+        // Exchange the code for tokens
+        const tokenData = await getTokensFromCode(code);
+        
+        // Get user ID from your auth system
+        const userId = 'user-123'; // Replace with actual user ID
+        
+        setStatus('Sending tokens to n8n...');
+        
+        // Send tokens to n8n for storage
+        await sendTokensToN8n(tokenData, userId);
+        
+        setStatus('Authentication successful!');
+        
+        // Redirect to dashboard after a brief delay
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 1500);
+      } catch (error) {
+        console.error('Authentication error:', error);
+        setStatus('Authentication failed. Please try again.');
+      }
+    };
+    
+    if (router.isReady) {
+      handleCallback();
+    }
+  }, [router.isReady, router.query]);
+  
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
+      <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-md">
+        <h1 className="text-2xl font-bold text-center mb-4">Google Authentication</h1>
+        <p className="text-center text-gray-600">{status}</p>
+      </div>
+    </div>
+  );
+}
+```
+
+4. Create an analytics dashboard component that uses the stored tokens:
+
+```javascript
+// pages/dashboard.jsx
+import { useState, useEffect } from 'react';
+import { fetchAnalyticsData } from '../services/googleAuth';
+
+export default function Dashboard() {
+  const [properties, setProperties] = useState([]);
+  const [selectedProperty, setSelectedProperty] = useState('');
+  const [reportData, setReportData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  
+  // Fetch user's GA4 properties on mount
+  useEffect(() => {
+    // This would typically come from your user management system
+    const userId = 'user-123';
+    
+    async function fetchProperties() {
+      // Implementation to fetch properties
+      // This could be another n8n workflow
+    }
+    
+    fetchProperties();
+  }, []);
+  
+  const runReport = async () => {
+    if (!selectedProperty) return;
+    
+    setLoading(true);
+    
+    try {
+      // This would typically come from your user management system
+      const userId = 'user-123';
+      
+      const data = await fetchAnalyticsData(userId, selectedProperty, {
+        dateRanges: [{ startDate: '30daysAgo', endDate: 'yesterday' }],
+        metrics: [{ name: 'activeUsers' }],
+        dimensions: [{ name: 'date' }]
+      });
+      
+      setReportData(data);
+    } catch (error) {
+      console.error('Error fetching report:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  return (
+    <div className="container mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-4">Analytics Dashboard</h1>
+      
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Select Property
+        </label>
+        <select 
+          value={selectedProperty}
+          onChange={(e) => setSelectedProperty(e.target.value)}
+          className="w-full p-2 border border-gray-300 rounded"
+        >
+          <option value="">Select a property</option>
+          {properties.map(property => (
+            <option key={property.id} value={property.id}>
+              {property.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      
+      <button
+        onClick={runReport}
+        disabled={!selectedProperty || loading}
+        className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-blue-300"
+      >
+        {loading ? 'Loading...' : 'Run Report'}
+      </button>
+      
+      {reportData && (
+        <div className="mt-6">
+          <h2 className="text-xl font-semibold mb-2">Results</h2>
+          <pre className="bg-gray-100 p-4 rounded overflow-auto">
+            {JSON.stringify(reportData, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Step 8: Create n8n Workflow for Token Refresh
+
+Since OAuth tokens expire, create a workflow to handle token refresh:
+
+1. Create a new workflow for token refresh
+2. Add a Schedule trigger node to run periodically (e.g., daily)
+3. Add a Function node to check for expiring tokens:
+   ```javascript
+   // This assumes tokens are stored in a database
+   // Adjust based on your token storage mechanism
+   const tokensToRefresh = [];
+   
+   // Process all stored tokens
+   for (const userId in $workflow.variables.tokens) {
+     const tokenData = $workflow.variables.tokens[userId];
+     
+     // Check if token expires soon (within 1 day)
+     const expiresAt = tokenData.expires_at || (tokenData.created_at + tokenData.expires_in);
+     const oneDayFromNow = Math.floor(Date.now() / 1000) + (24 * 60 * 60);
+     
+     if (expiresAt < oneDayFromNow && tokenData.refresh_token) {
+       tokensToRefresh.push({
+         userId,
+         refresh_token: tokenData.refresh_token
+       });
+     }
+   }
+   
+   return { tokensToRefresh };
+   ```
+4. Add a Split In Batches node to handle each token separately
+5. Add an HTTP Request node for each token:
+   - Method: POST
+   - URL: `https://oauth2.googleapis.com/token`
+   - Headers: `{ "Content-Type": "application/x-www-form-urlencoded" }`
+   - Body (Form-Data):
+     - client_id: YOUR_CLIENT_ID
+     - client_secret: YOUR_CLIENT_SECRET
+     - refresh_token: `{{$json.refresh_token}}`
+     - grant_type: refresh_token
+6. Add a Function node to store the refreshed token:
+   ```javascript
+   // Update the token in storage
+   const userId = $json.userId;
+   const newTokenData = $json; // The response from Google
+   
+   // Keep the refresh token from the original data
+   newTokenData.refresh_token = $workflow.variables.tokens[userId].refresh_token;
+   
+   // Update the stored token
+   $workflow.variables.tokens[userId] = newTokenData;
+   
+   return { success: true, userId };
+   ```
+7. Save and activate the workflow
+
+## Step 9: Implement Error Handling
+
+Ensure proper error handling throughout your application:
+
+1. In your frontend:
+   - Handle authentication failures
+   - Add retry logic for API calls
+   - Implement clear user feedback for errors
+
+2. In n8n workflows:
+   - Add error nodes to handle failures
+   - Implement notification mechanisms for critical failures
+   - Log errors for debugging
+
+## Step 10: Security Considerations
+
+Important security considerations for this architecture:
+
+1. **Token Storage**:
+   - Ideally, store tokens in a secure database, not workflow variables
+   - Consider encrypting tokens at rest
+
+2. **Client Secret Management**:
+   - Don't expose client secrets in frontend code
+   - Consider implementing a proxy service for token exchange
+
+3. **User Authentication**:
+   - Ensure proper user authentication before accepting/using tokens
+   - Validate that users can only access their own analytics data
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+1. **Google hasn't verified this app warning**:
+   - This is normal for development. Users can click "Advanced" and proceed.
+   - For production, complete Google's verification process.
+
+2. **OAuth tokens expire after 7 days** with testing OAuth setup:
+   - This happens when your Google Cloud project has "Publishing status" set to "Testing" and "User type" set to "External"
+   - Solution: Users will need to reconnect every 7 days, or you can move to production status
+
+3. **Empty list of properties**:
+   - Make sure you've enabled the correct Google Analytics APIs in your Google Cloud project
+   - Verify that the authenticating user has access to Google Analytics properties
+
+## Conclusion
+
+You've now set up a system where users authenticate with Google in your frontend application, and those credentials are sent to n8n for processing analytics requests. This architecture allows for a seamless user experience while leveraging n8n's powerful workflow capabilities for data processing.
+
+For production use, consider:
+- Implementing a more robust token storage solution
+- Adding a way for users to revoke access
+- Developing more specialized analytics templates and visualizations
+
+## Resources
+
+- [n8n Webhook Documentation](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.webhook/)
+- [Google Analytics API Documentation](https://developers.google.com/analytics/devguides/reporting/data/v1)
+- [Google OAuth 2.0 Documentation](https://developers.google.com/identity/protocols/oauth2)

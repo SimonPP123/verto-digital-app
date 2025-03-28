@@ -16,6 +16,7 @@ const ChatSession = require('../models/ChatSession');
 const XLSX = require('xlsx');
 const AudienceAnalysis = require('../models/AudienceAnalysis');
 const GA4Report = require('../models/GA4Report');
+const GoogleAnalyticsAuth = require('../models/GoogleAnalyticsAuth');
 
 // Create uploads directory if it doesn't exist
 const uploadDir = path.join(__dirname, '../../uploads');
@@ -2341,6 +2342,287 @@ router.delete('/analytics/google-analytics/:id', isAuthenticated, async (req, re
     return res.status(500).json({
       success: false,
       message: 'Failed to delete report'
+    });
+  }
+});
+
+// Google Analytics 4 Authentication Routes
+
+// Get Google Analytics 4 auth status
+router.get('/analytics/auth/status', isAuthenticated, async (req, res) => {
+  try {
+    // Check if the user has a valid GA4 authentication
+    const auth = await GoogleAnalyticsAuth.findOne({ user: req.user._id });
+    
+    if (!auth) {
+      return res.json({
+        authenticated: false
+      });
+    }
+    
+    // Check if the token is expired
+    const now = new Date();
+    const isExpired = now >= auth.expiresAt;
+    
+    if (isExpired) {
+      // Token is expired, we need to refresh it or consider it invalid
+      // For now, we'll consider it invalid and require re-authentication
+      return res.json({
+        authenticated: false
+      });
+      
+      // TODO: Implement token refresh logic here
+    }
+    
+    // User is authenticated with GA4
+    return res.json({
+      authenticated: true
+    });
+  } catch (error) {
+    logger.error('Error checking GA4 auth status:', error);
+    return res.status(500).json({
+      authenticated: false,
+      error: 'Failed to check authentication status'
+    });
+  }
+});
+
+// Start Google Analytics 4 OAuth flow
+router.get('/analytics/auth/google', isAuthenticated, (req, res) => {
+  try {
+    // Generate a random state parameter for security
+    const state = Math.random().toString(36).substring(2, 15);
+    
+    // Save the state in the session to verify later
+    req.session.oauthState = state;
+    
+    // Create the OAuth URL
+    const scopes = [
+      'https://www.googleapis.com/auth/analytics.readonly'
+    ];
+    
+    const redirectUri = `${process.env.BACKEND_URL}/api/analytics/auth/callback`;
+    
+    // Create the authorization URL
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `response_type=code&` +
+      `client_id=${encodeURIComponent(process.env.GOOGLE_CLIENT_ID)}&` +
+      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `scope=${encodeURIComponent(scopes.join(' '))}&` +
+      `access_type=offline&` +
+      `prompt=consent&` + // Force consent screen to get refresh token
+      `state=${encodeURIComponent(state)}`;
+    
+    logger.info('Starting GA4 OAuth flow for user:', {
+      userId: req.user._id,
+      redirectUri,
+      state,
+      scopes
+    });
+    
+    res.redirect(authUrl);
+  } catch (error) {
+    logger.error('Error starting GA4 OAuth flow:', error);
+    res.status(500).send(`
+      <script>
+        window.opener.postMessage(
+          { type: 'ga4-auth', success: false, error: 'Failed to start authentication process' },
+          window.location.origin
+        );
+        window.close();
+      </script>
+    `);
+  }
+});
+
+// Handle Google Analytics 4 OAuth callback
+router.get('/analytics/auth/callback', isAuthenticated, async (req, res) => {
+  try {
+    const { code, state } = req.query;
+    
+    // Check if the state matches to prevent CSRF attacks
+    if (state !== req.session.oauthState) {
+      logger.error('OAuth state mismatch - potential CSRF attack:', {
+        sessionState: req.session.oauthState,
+        receivedState: state,
+        userId: req.user._id
+      });
+      
+      return res.status(400).send(`
+        <script>
+          window.opener.postMessage(
+            { type: 'ga4-auth', success: false, error: 'Invalid state parameter - authentication failed' },
+            window.location.origin
+          );
+          window.close();
+        </script>
+      `);
+    }
+    
+    // Clear the state from the session
+    req.session.oauthState = null;
+    
+    if (!code) {
+      logger.error('No authorization code received in callback');
+      return res.status(400).send(`
+        <script>
+          window.opener.postMessage(
+            { type: 'ga4-auth', success: false, error: 'No authorization code received' },
+            window.location.origin
+          );
+          window.close();
+        </script>
+      `);
+    }
+    
+    // Exchange the authorization code for tokens
+    const redirectUri = `${process.env.BACKEND_URL}/api/analytics/auth/callback`;
+    
+    const tokenResponse = await axios.post(
+      'https://oauth2.googleapis.com/token',
+      {
+        code,
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code'
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    const {
+      access_token,
+      refresh_token,
+      expires_in,
+      scope,
+      token_type
+    } = tokenResponse.data;
+    
+    if (!access_token) {
+      logger.error('No access token received:', tokenResponse.data);
+      return res.status(400).send(`
+        <script>
+          window.opener.postMessage(
+            { type: 'ga4-auth', success: false, error: 'Failed to get access token' },
+            window.location.origin
+          );
+          window.close();
+        </script>
+      `);
+    }
+    
+    // Calculate token expiration time
+    const expiresAt = new Date();
+    expiresAt.setSeconds(expiresAt.getSeconds() + expires_in);
+    
+    // Save the token in the database
+    await GoogleAnalyticsAuth.findOneAndUpdate(
+      { user: req.user._id },
+      {
+        user: req.user._id,
+        accessToken: access_token,
+        refreshToken: refresh_token || '', // Some flows might not return a refresh token
+        expiresAt,
+        scope,
+        tokenType: token_type
+      },
+      { upsert: true, new: true }
+    );
+    
+    logger.info('GA4 authentication successful for user:', {
+      userId: req.user._id,
+      scopes: scope,
+      expires: expiresAt
+    });
+    
+    // Return success to the opener window and close the popup
+    return res.send(`
+      <script>
+        window.opener.postMessage(
+          { type: 'ga4-auth', success: true },
+          window.location.origin
+        );
+        window.close();
+      </script>
+    `);
+  } catch (error) {
+    logger.error('Error handling GA4 OAuth callback:', error);
+    res.status(500).send(`
+      <script>
+        window.opener.postMessage(
+          { type: 'ga4-auth', success: false, error: 'Authentication failed' },
+          window.location.origin
+        );
+        window.close();
+      </script>
+    `);
+  }
+});
+
+// Endpoint to forward analytics requests to n8n with proper authentication
+router.post('/analytics/query', isAuthenticated, async (req, res) => {
+  try {
+    // Check if this is an internal request from the assistant endpoint
+    // (which will include userId in the request body)
+    const userId = req.body.userId || req.user._id;
+    
+    // Get the GA4 auth from the database
+    const auth = await GoogleAnalyticsAuth.findOne({ user: userId });
+    
+    if (!auth) {
+      logger.error('GA4 auth not found for user:', { 
+        userId,
+        isInternalRequest: !!req.body.userId,
+        body: req.body
+      });
+      return res.status(401).json({
+        success: false,
+        message: 'Not authenticated with Google Analytics'
+      });
+    }
+    
+    // Check if the token is expired
+    const now = new Date();
+    if (now >= auth.expiresAt) {
+      logger.error('GA4 token expired for user:', { 
+        userId,
+        tokenExpiry: auth.expiresAt
+      });
+      return res.status(401).json({
+        success: false,
+        message: 'Google Analytics token expired'
+      });
+    }
+    
+    // Get the webhook URL for the Google Analytics 4 agent
+    const n8nUrl = process.env.N8N_GOOGLE_ANALYTICS_4;
+    if (!n8nUrl) {
+      throw new Error('N8N_GOOGLE_ANALYTICS_4 environment variable is not set');
+    }
+    
+    logger.info('Forwarding GA4 request to n8n:', {
+      userId,
+      url: n8nUrl,
+      hasAccessToken: !!auth.accessToken
+    });
+    
+    // Forward the request to n8n with the token
+    const response = await axios.post(n8nUrl, {
+      ...req.body,
+      accessToken: auth.accessToken,
+      userId: userId.toString()
+    });
+    
+    return res.json(response.data);
+  } catch (error) {
+    logger.error('Error forwarding analytics request to n8n:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to process analytics request'
     });
   }
 });
