@@ -37,8 +37,8 @@ export default function MessageDisplay({ message }: MessageProps) {
                   {language}
                 </div>
               )}
-              <pre className="bg-gray-900 text-gray-100 p-3 overflow-x-auto">
-                <code>{code}</code>
+              <pre className="bg-gray-900 text-gray-100 p-3 overflow-x-auto whitespace-pre-wrap break-words">
+                <code className="break-words">{code}</code>
               </pre>
             </div>
           );
@@ -46,8 +46,8 @@ export default function MessageDisplay({ message }: MessageProps) {
         
         // Fallback for malformed code blocks
         return (
-          <pre key={index} className="my-2 bg-gray-100 p-3 rounded-md overflow-x-auto">
-            <code>{part.slice(3, -3)}</code>
+          <pre key={index} className="my-2 bg-gray-100 p-3 rounded-md overflow-x-auto whitespace-pre-wrap break-words">
+            <code className="break-words">{part.slice(3, -3)}</code>
           </pre>
         );
       }
@@ -89,7 +89,7 @@ export default function MessageDisplay({ message }: MessageProps) {
                   ))}
                 </div>
               )}
-              <div className="overflow-x-auto mb-3">
+              <div className="overflow-x-auto mb-3 max-w-full">
                 <table className="min-w-full border-collapse border border-gray-300">
                   <tbody>
                     {dataRows.map((row, i) => (
@@ -132,7 +132,7 @@ export default function MessageDisplay({ message }: MessageProps) {
                   ))}
                 </div>
               )}
-              <div className="overflow-x-auto mb-3">
+              <div className="overflow-x-auto mb-3 max-w-full">
                 <table className="min-w-full border-collapse">
                   <tbody>
                     {tableLines.map((line, i) => (
@@ -186,7 +186,7 @@ export default function MessageDisplay({ message }: MessageProps) {
             {format(timestamp, 'p')}
           </div>
         </div>
-        <div className={`text-sm ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>
+        <div className={`text-sm break-words ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>
           {renderContent(message.content)}
         </div>
       </div>

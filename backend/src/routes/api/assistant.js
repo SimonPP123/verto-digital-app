@@ -220,17 +220,38 @@ router.post('/send', isAuthenticated, async (req, res) => {
         }, 
         { 
           signal: controller.signal,
-          timeout: timeoutDuration 
+          timeout: timeoutDuration,
+          validateStatus: status => true // Accept any status code to handle errors ourselves
         }
       );
       
       clearTimeout(timeoutId); // Clear the timeout
       
+      // Check for non-200 status codes
+      if (webhookResponse.status !== 200) {
+        throw {
+          response: {
+            status: webhookResponse.status,
+            statusText: webhookResponse.statusText,
+            data: {
+              message: typeof webhookResponse.data === 'string' 
+                ? webhookResponse.data 
+                : 'Non-200 status code received from webhook'
+            }
+          }
+        };
+      }
+      
       // Extract the assistant's response from the webhook response
       let responseContent = 'Sorry, I received an empty response.';
       
+      // Check if the response is valid
+      if (typeof webhookResponse.data === 'string') {
+        // String response - use directly
+        responseContent = webhookResponse.data;
+      }
       // Check if the response is an array with at least one item
-      if (Array.isArray(webhookResponse.data) && webhookResponse.data.length > 0) {
+      else if (Array.isArray(webhookResponse.data) && webhookResponse.data.length > 0) {
         // Check if the first item has an output field
         if (webhookResponse.data[0].output) {
           responseContent = webhookResponse.data[0].output;

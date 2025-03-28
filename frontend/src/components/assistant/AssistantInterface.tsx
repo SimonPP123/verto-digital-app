@@ -8,6 +8,7 @@ import MessageControls from './MessageControls';
 import { v4 as uuidv4 } from 'uuid';
 import AgentSelectionModal from './AgentSelectionModal';
 import { format } from 'date-fns';
+import TemplateVariablesModal, { TemplateVariable } from './TemplateVariablesModal';
 
 // Define types
 type MessageType = {
@@ -43,11 +44,7 @@ type Template = {
   _id: string;
   title: string;
   content: string;
-  variables: Array<{
-    name: string;
-    description: string;
-    defaultValue: string;
-  }>;
+  variables: TemplateVariable[];
   isPublic: boolean;
   user: string;
   createdAt: string;
@@ -68,6 +65,8 @@ export default function AssistantInterface() {
   const [isResizingLeft, setIsResizingLeft] = useState(false);
   const [isResizingRight, setIsResizingRight] = useState(false);
   const [showAgentModal, setShowAgentModal] = useState(false);
+  const [showTemplateVarsModal, setShowTemplateVarsModal] = useState(false);
+  const [currentTemplate, setCurrentTemplate] = useState<Template | null>(null);
 
   useEffect(() => {
     // Fetch conversation sessions on component mount
@@ -272,7 +271,14 @@ export default function AssistantInterface() {
         })
       });
       
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        console.error('Error parsing JSON response:', jsonError);
+        const responseText = await response.text();
+        throw new Error(`Invalid response format: ${responseText.substring(0, 100)}...`);
+      }
       
       if (data.success) {
         // Add the assistant response to the current conversation
@@ -498,34 +504,36 @@ export default function AssistantInterface() {
         return; // Exit early, the modal will handle the rest
       }
       
-      // Prepare the message content
-      let messageContent = template.content;
-      
-      if (matches && matches.length > 0) {
-        // Template has variables, collect values for them
-        const variables: Record<string, string> = {};
-        
-        // Initialize with default values if available
-        template.variables.forEach(variable => {
-          variables[variable.name] = variable.defaultValue || '';
-        });
-        
-        // Show prompt to fill variables
-        messageContent = template.content.replace(variableRegex, (match, varName) => {
-          const variableName = varName.trim();
-          const value = prompt(`Enter value for ${variableName}:`, variables[variableName] || '');
-          return value || match; // If user cancels, keep the original template variable
-        });
-      }
-      
-      // Now send the message to the conversation we've ensured exists
-      if (targetConversation) {
-        sendMessage(messageContent, targetConversation.conversationId);
+      if (matches && matches.length > 0 && template.variables.length > 0) {
+        // Show modal for template variables
+        setCurrentTemplate(template);
+        setShowTemplateVarsModal(true);
+      } else {
+        // Template has no variables, use as is
+        sendMessage(template.content, targetConversation.conversationId);
       }
     } catch (error) {
       console.error('Error using template:', error);
       setError('Failed to use template. Please try again.');
     }
+  };
+  
+  const handleVariablesSubmit = (values: Record<string, string>) => {
+    if (!currentTemplate || !currentConversation) return;
+    
+    // Replace variables in template content
+    let messageContent = currentTemplate.content;
+    const variableRegex = /\{\{([^}]+)\}\}/g;
+    
+    messageContent = messageContent.replace(variableRegex, (match, varName) => {
+      const variableName = varName.trim();
+      return values[variableName] || match;
+    });
+    
+    // Send message and close modal
+    sendMessage(messageContent, currentConversation.conversationId);
+    setShowTemplateVarsModal(false);
+    setCurrentTemplate(null);
   };
 
   // Handle mouse down event on resizer
@@ -811,6 +819,20 @@ export default function AssistantInterface() {
         onClose={() => setShowAgentModal(false)}
         onSelectAgent={handleAgentSelected}
       />
+      
+      {/* Template Variables Modal */}
+      {currentTemplate && (
+        <TemplateVariablesModal
+          isOpen={showTemplateVarsModal}
+          onClose={() => {
+            setShowTemplateVarsModal(false);
+            setCurrentTemplate(null);
+          }}
+          onSubmit={handleVariablesSubmit}
+          variables={currentTemplate.variables}
+          templateContent={currentTemplate.content}
+        />
+      )}
     </div>
   );
 }

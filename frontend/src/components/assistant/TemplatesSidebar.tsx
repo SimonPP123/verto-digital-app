@@ -2,12 +2,7 @@
 
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-
-type TemplateVariable = {
-  name: string;
-  description: string;
-  defaultValue: string;
-};
+import { TemplateVariable } from './TemplateVariablesModal';
 
 type Template = {
   _id: string;
@@ -39,6 +34,7 @@ export default function TemplatesSidebar({
   const [templateVariables, setTemplateVariables] = useState<TemplateVariable[]>([]);
   const [isPublic, setIsPublic] = useState(false);
   const [showPublicOnly, setShowPublicOnly] = useState(false);
+  const [optionInput, setOptionInput] = useState('');
   
   const resetForm = () => {
     setTemplateTitle('');
@@ -46,6 +42,7 @@ export default function TemplatesSidebar({
     setTemplateVariables([]);
     setIsPublic(false);
     setEditingTemplate(null);
+    setOptionInput('');
   };
   
   const handleAddTemplate = () => {
@@ -66,39 +63,45 @@ export default function TemplatesSidebar({
     e.preventDefault();
     
     try {
+      // Clean variables to remove MongoDB _id properties before sending
+      const cleanedVariables = templateVariables.map(({ _id, ...rest }) => rest);
+      
       const templateData = {
         title: templateTitle,
         content: templateContent,
-        variables: templateVariables,
+        variables: cleanedVariables,
         isPublic
       };
       
+      let response;
+      
       if (editingTemplate) {
         // Update existing template
-        const response = await fetch(`/api/assistant/templates/${editingTemplate._id}`, {
+        response = await fetch(`/api/assistant/templates/${editingTemplate._id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(templateData)
         });
-        
-        if (!response.ok) {
-          throw new Error('Failed to update template');
-        }
       } else {
         // Create new template
-        const response = await fetch('/api/assistant/templates', {
+        response = await fetch('/api/assistant/templates', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(templateData)
         });
-        
-        if (!response.ok) {
-          throw new Error('Failed to create template');
-        }
+      }
+      
+      if (!response.ok) {
+        // Try to get detailed error message from response
+        const errorData = await response.json().catch(() => null);
+        const errorMessage = errorData?.message || 
+                            errorData?.error || 
+                            `Failed to ${editingTemplate ? 'update' : 'create'} template`;
+        throw new Error(errorMessage);
       }
       
       // Refresh templates list
@@ -109,7 +112,7 @@ export default function TemplatesSidebar({
       setShowTemplateForm(false);
     } catch (error) {
       console.error('Error saving template:', error);
-      alert('Failed to save template. Please try again later.');
+      alert(`Failed to save template: ${error instanceof Error ? error.message : 'Please try again later.'}`);
     }
   };
   
@@ -136,7 +139,7 @@ export default function TemplatesSidebar({
   const handleAddVariable = () => {
     setTemplateVariables([
       ...templateVariables,
-      { name: '', description: '', defaultValue: '' }
+      { name: '', description: '', defaultValue: '', type: 'text' }
     ]);
   };
   
@@ -179,7 +182,8 @@ export default function TemplatesSidebar({
             newVariables.push({
               name: varName,
               description: '',
-              defaultValue: ''
+              defaultValue: '',
+              type: 'text'
             });
           }
         }
@@ -369,6 +373,103 @@ export default function TemplatesSidebar({
                           className="w-full p-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
                         />
                       </div>
+                      
+                      <div className="mb-2">
+                        <label className="block text-xs text-gray-500 mb-1">
+                          Variable Type
+                        </label>
+                        <select
+                          value={variable.type || 'text'}
+                          onChange={(e) => handleVariableChange(index, 'type', e.target.value)}
+                          className="w-full p-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
+                        >
+                          <option value="text">Text</option>
+                          <option value="multiChoice">Multiple Choice</option>
+                          <option value="date">Date</option>
+                          <option value="dateRange">Date Range</option>
+                        </select>
+                        
+                        {/* Variable Type Information */}
+                        <div className="mt-1 text-xs text-gray-500 italic">
+                          {variable.type === 'text' && (
+                            <p>Text: Simple text input field.</p>
+                          )}
+                          {variable.type === 'multiChoice' && (
+                            <p>Multiple Choice: Add options below that users can select from. Users can select multiple options.</p>
+                          )}
+                          {variable.type === 'date' && (
+                            <p>Date: A calendar date picker. Default value format: YYYY-MM-DD (e.g., 2023-12-31)</p>
+                          )}
+                          {variable.type === 'dateRange' && (
+                            <p>Date Range: Two calendar date pickers for start and end dates. Default value format: YYYY-MM-DD,YYYY-MM-DD (e.g., 2023-01-01,2023-12-31)</p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {variable.type === 'multiChoice' && (
+                        <div className="mb-2">
+                          <label className="block text-xs text-gray-500 mb-1">
+                            Options
+                          </label>
+                          <div className="flex space-x-2 mb-2">
+                            <input
+                              type="text"
+                              value={optionInput || ''}
+                              onChange={(e) => setOptionInput(e.target.value)}
+                              placeholder="Enter an option"
+                              className="flex-1 p-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (optionInput && optionInput.trim() !== '') {
+                                  const updatedVariables = [...templateVariables];
+                                  const currentOptions = updatedVariables[index].options || [];
+                                  updatedVariables[index] = {
+                                    ...updatedVariables[index],
+                                    options: [...currentOptions, optionInput.trim()]
+                                  };
+                                  setTemplateVariables(updatedVariables);
+                                  setOptionInput('');
+                                }
+                              }}
+                              className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
+                            >
+                              Add
+                            </button>
+                          </div>
+                          {variable.options && variable.options.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {variable.options.map((opt, optIndex) => (
+                                <div key={optIndex} className="flex items-center bg-gray-100 px-2 py-1 rounded text-sm">
+                                  <span>{opt}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updatedVariables = [...templateVariables];
+                                      const filteredOptions = (updatedVariables[index].options || []).filter(
+                                        (_, i) => i !== optIndex
+                                      );
+                                      updatedVariables[index] = {
+                                        ...updatedVariables[index],
+                                        options: filteredOptions
+                                      };
+                                      setTemplateVariables(updatedVariables);
+                                    }}
+                                    className="ml-1 text-gray-500 hover:text-red-500"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-gray-500 italic mt-2">No options added yet</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
