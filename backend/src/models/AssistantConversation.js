@@ -34,6 +34,10 @@ const AgentSchema = new Schema({
   description: {
     type: String,
     default: 'Default agent'
+  },
+  ga4AccountId: {
+    type: String,
+    default: ''
   }
 });
 

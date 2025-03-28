@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import AgentSelectionModal from './AgentSelectionModal';
 import { format } from 'date-fns';
 import TemplateVariablesModal, { TemplateVariable } from './TemplateVariablesModal';
+import GA4AccountIdModal from './GA4AccountIdModal';
 
 // Define types
 type MessageType = {
@@ -37,6 +38,7 @@ type Conversation = {
     webhookUrl: string;
     icon: string;
     description: string;
+    ga4AccountId?: string;
   };
 };
 
@@ -67,6 +69,8 @@ export default function AssistantInterface() {
   const [showAgentModal, setShowAgentModal] = useState(false);
   const [showTemplateVarsModal, setShowTemplateVarsModal] = useState(false);
   const [currentTemplate, setCurrentTemplate] = useState<Template | null>(null);
+  const [showGA4AccountIdModal, setShowGA4AccountIdModal] = useState(false);
+  const [pendingAgent, setPendingAgent] = useState<Agent | null>(null);
 
   useEffect(() => {
     // Fetch conversation sessions on component mount
@@ -150,6 +154,49 @@ export default function AssistantInterface() {
   };
 
   const handleAgentSelected = async (agent: Agent) => {
+    // Check if this is a Google Analytics 4 agent
+    if (agent.name === 'Google Analytics 4') {
+      // Store the selected agent temporarily and show the account ID modal
+      setPendingAgent(agent);
+      setShowGA4AccountIdModal(true);
+      return null;
+    }
+    
+    // For other agents, proceed normally
+    return createNewConversation(agent);
+  };
+
+  // New function to handle account ID submission
+  const handleGA4AccountIdSubmit = async (accountId: string) => {
+    if (!pendingAgent) return;
+    
+    // Validate the account ID - it must not be empty
+    if (!accountId || accountId.trim() === '') {
+      setError('Please provide a valid Google Analytics 4 Account ID');
+      return;
+    }
+    
+    // Close the modal
+    setShowGA4AccountIdModal(false);
+    
+    // Create a new agent object with the account ID
+    const agentWithAccountId = {
+      ...pendingAgent,
+      ga4AccountId: accountId.trim()
+    };
+    
+    // Log the account ID for debugging
+    console.log('Creating conversation with GA4 account ID:', accountId.trim());
+    
+    // Create the conversation with the enhanced agent
+    await createNewConversation(agentWithAccountId);
+    
+    // Clear the pending agent
+    setPendingAgent(null);
+  };
+  
+  // Extract conversation creation logic to a separate function
+  const createNewConversation = async (agent: Agent & { ga4AccountId?: string }) => {
     try {
       const conversationId = uuidv4();
       
@@ -172,9 +219,19 @@ export default function AssistantInterface() {
           name: agent.name,
           webhookUrl: agent.webhookUrl,
           icon: agent.icon,
-          description: agent.description
+          description: agent.description,
+          ga4AccountId: agent.ga4AccountId
         }
       };
+      
+      // Log the conversation data for debugging
+      console.log('Creating new conversation:', {
+        ...newConversation,
+        agent: {
+          ...newConversation.agent,
+          ga4AccountId: newConversation.agent.ga4AccountId
+        }
+      });
       
       // First set the conversation in UI to ensure smooth UX
       setCurrentConversation(newConversation);
@@ -266,6 +323,16 @@ export default function AssistantInterface() {
       const isGoogleAnalyticsAgent = currentConversation.agent?.name === 'Google Analytics 4';
       let webhookUrl = currentConversation.agent?.webhookUrl;
       let ga4Token = null;
+      const ga4AccountId = currentConversation.agent?.ga4AccountId;
+
+      // Log the GA4 account ID for debugging
+      if (isGoogleAnalyticsAgent) {
+        console.log('GA4 Account ID:', ga4AccountId);
+        if (!ga4AccountId) {
+          setError('Google Analytics 4 Account ID is required. Please create a new conversation and provide the account ID.');
+          return;
+        }
+      }
 
       // If using GA4 agent, get the auth token
       if (isGoogleAnalyticsAgent) {
@@ -297,10 +364,54 @@ export default function AssistantInterface() {
           message: messageContent,
           webhookUrl,
           ga4Token,
-          isGoogleAnalyticsAgent
+          isGoogleAnalyticsAgent,
+          ga4AccountId
         })
       });
 
+      // Check for HTTP status first
+      if (!response.ok) {
+        // Try to get the response content
+        const responseText = await response.text();
+        
+        try {
+          // Try to parse as JSON
+          const errorData = JSON.parse(responseText);
+          
+          // If we have an updated conversation in the error response, use it
+          if (errorData.updatedConversation) {
+            setCurrentConversation(errorData.updatedConversation);
+            
+            // Also update the conversation in the list
+            setConversations(prevConversations => {
+              return prevConversations.map(conv => 
+                conv.conversationId === errorData.updatedConversation.conversationId
+                  ? errorData.updatedConversation
+                  : conv
+              );
+            });
+            
+            // If this was a Google Analytics authentication error, provide a specific error message
+            if (errorData.message && errorData.message.includes('Not authenticated with Google Analytics')) {
+              setError('Google Analytics authentication required. Please authenticate and try again.');
+            } else {
+              // Show general error message based on response
+              setError(errorData.message || errorData.error || `Error (${response.status})`);
+            }
+            
+            return; // Early return since we've handled the error
+          }
+          
+          // No updated conversation, throw regular error
+          throw new Error(errorData.message || errorData.error || `Server error (${response.status})`);
+        } catch (parseError) {
+          // If parsing fails, it's not JSON, use the text directly
+          console.error('Failed to parse error response:', responseText);
+          throw new Error(`Server error (${response.status}): ${responseText.substring(0, 100)}...`);
+        }
+      }
+      
+      // For successful responses, get the content and try to parse as JSON
       const responseText = await response.text();
       let data;
       
@@ -311,9 +422,9 @@ export default function AssistantInterface() {
         throw new Error(`Failed to parse server response: ${responseText.substring(0, 100)}...`);
       }
 
-      // Even with a 500 status, we might get a valid JSON response with conversation updates
+      // Process the successful response
       if (data.updatedConversation) {
-        // Update the conversation with the server data, even if there was an error
+        // Update the conversation with the server data
         setCurrentConversation(data.updatedConversation);
         
         // Also update the conversation in the list
@@ -324,27 +435,6 @@ export default function AssistantInterface() {
               : conv
           );
         });
-        
-        // We've already handled updating the UI, so we can return early
-        setIsSendingMessage(false);
-        
-        // If this was a Google Analytics authentication error, provide a specific error message
-        if (data.message && data.message.includes('Not authenticated with Google Analytics')) {
-          setError('Google Analytics authentication required. Please authenticate and try again.');
-          
-          // Optionally, show the auth modal again
-          // This would require passing a function to open the auth modal from the parent component
-          return;
-        }
-        
-        if (!response.ok) {
-          // This is a handled error - the assistant has already responded in the conversation
-          // We don't need to show a general error since the assistant response explains the issue
-          return;
-        }
-      } else if (!response.ok) {
-        // For other errors without an updated conversation
-        throw new Error(`Failed to send message (${response.status}): ${data.error || data.message || responseText}`);
       }
 
       if (!data.success) {
@@ -631,6 +721,7 @@ export default function AssistantInterface() {
       webhookUrl: string;
       icon: string;
       description: string;
+      ga4AccountId?: string;
     };
   }) => {
     if (!conversation.agent) return null;
@@ -654,7 +745,12 @@ export default function AssistantInterface() {
             </svg>
           )}
         </div>
-        <span className="ml-1 text-xs text-blue-600 font-medium">{conversation.agent.name}</span>
+        <div className="ml-1 flex flex-col">
+          <span className="text-xs text-blue-600 font-medium">{conversation.agent.name}</span>
+          {conversation.agent.ga4AccountId && (
+            <span className="text-xxs text-blue-500">ID: {conversation.agent.ga4AccountId}</span>
+          )}
+        </div>
       </div>
     );
   };
@@ -763,7 +859,12 @@ export default function AssistantInterface() {
                       </svg>
                     )}
                   </div>
-                  <span className="font-medium text-blue-700 text-sm">{currentConversation.agent.name}</span>
+                  <div className="flex flex-col">
+                    <span className="font-medium text-blue-700 text-sm">{currentConversation.agent.name}</span>
+                    {currentConversation.agent.ga4AccountId && (
+                      <span className="text-xs text-blue-600">Account ID: {currentConversation.agent.ga4AccountId}</span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -860,6 +961,16 @@ export default function AssistantInterface() {
           templateContent={currentTemplate.content}
         />
       )}
+
+      {/* Add GA4 Account ID Modal */}
+      <GA4AccountIdModal
+        isOpen={showGA4AccountIdModal}
+        onClose={() => {
+          setShowGA4AccountIdModal(false);
+          setPendingAgent(null);
+        }}
+        onSubmit={handleGA4AccountIdSubmit}
+      />
     </div>
   );
 }

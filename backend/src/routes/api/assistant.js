@@ -102,7 +102,8 @@ router.post('/conversations', isAuthenticated, async (req, res) => {
           name: conversationData.agent.name || 'BigQuery Agent',
           webhookUrl: conversationData.agent.webhookUrl || '',
           icon: conversationData.agent.icon || 'database',
-          description: conversationData.agent.description || 'Default agent'
+          description: conversationData.agent.description || 'Default agent',
+          ga4AccountId: conversationData.agent.ga4AccountId || ''
         };
       }
     } else {
@@ -117,10 +118,17 @@ router.post('/conversations', isAuthenticated, async (req, res) => {
           name: conversationData.agent.name || 'BigQuery Agent',
           webhookUrl: conversationData.agent.webhookUrl || '',
           icon: conversationData.agent.icon || 'database',
-          description: conversationData.agent.description || 'Default agent'
+          description: conversationData.agent.description || 'Default agent',
+          ga4AccountId: conversationData.agent.ga4AccountId || ''
         } : undefined
       });
     }
+    
+    // Log the agent data before saving
+    logger.info('Saving conversation with agent data:', {
+      agent: conversation.agent,
+      ga4AccountId: conversation.agent?.ga4AccountId
+    });
     
     // Save with proper error handling
     try {
@@ -162,10 +170,10 @@ router.get('/agents', isAuthenticated, async (req, res) => {
   }
 });
 
-// Modify the send message endpoint to handle GA4 authentication
+// Modify the send message endpoint to handle GA4 authentication and account ID
 router.post('/send', isAuthenticated, async (req, res) => {
   try {
-    const { conversationId, message, webhookUrl, ga4Token, isGoogleAnalyticsAgent } = req.body;
+    const { conversationId, message, webhookUrl, ga4Token, isGoogleAnalyticsAgent, ga4AccountId } = req.body;
     
     if (!conversationId || !message) {
       return res.status(400).json({
@@ -208,7 +216,17 @@ router.post('/send', isAuthenticated, async (req, res) => {
       });
     }
     
-    logger.info(`Sending message to webhook: ${targetWebhookUrl} for conversation: ${conversationId}`);
+    // Check for GA4 account ID - prioritize the one from the request, then from the conversation
+    const accountId = ga4AccountId || conversation.agent?.ga4AccountId;
+    
+    // Log the account ID for debugging
+    logger.info('GA4 Account ID check:', {
+      requestAccountId: ga4AccountId,
+      conversationAccountId: conversation.agent?.ga4AccountId,
+      finalAccountId: accountId,
+      isGoogleAnalyticsAgent,
+      conversationAgent: conversation.agent
+    });
     
     // Add the user message to the conversation
     const userMessage = {
@@ -234,6 +252,18 @@ router.post('/send', isAuthenticated, async (req, res) => {
       userEmail: req.user.email
     };
     
+    // Add GA4 account ID if available
+    if (isGoogleAnalyticsAgent && accountId) {
+      requestPayload.ga4AccountId = accountId.trim();
+      
+      // Log the account ID for debugging
+      logger.info('Including GA4 account ID in request payload:', { 
+        ga4AccountId: accountId,
+        isEmptyString: accountId === '',
+        trimmed: accountId.trim()
+      });
+    }
+    
     // Add conversation history if available
     if (conversation.messages.length > 0) {
       requestPayload.history = conversation.messages.map(msg => ({
@@ -247,7 +277,11 @@ router.post('/send', isAuthenticated, async (req, res) => {
       
       // Special handling for GA4 agent with internal endpoint
       if (isGoogleAnalyticsAgent && targetWebhookUrl === '/api/analytics/query') {
-        logger.info('Processing Google Analytics 4 query directly');
+        logger.info('Processing Google Analytics 4 query directly', { 
+          accountId,
+          hasAccountId: !!accountId,
+          trimmedAccountId: accountId ? accountId.trim() : null
+        });
         
         // Use direct function call instead of HTTP request
         responseData = await processAnalyticsQuery({
@@ -258,8 +292,18 @@ router.post('/send', isAuthenticated, async (req, res) => {
         // For all other cases, continue with normal webhook request
         
         // If this is a Google Analytics 4 agent and we have a token, include it
-        if (isGoogleAnalyticsAgent && ga4Token) {
-          requestPayload.accessToken = ga4Token;
+        if (isGoogleAnalyticsAgent) {
+          if (ga4Token) {
+            requestPayload.accessToken = ga4Token;
+          }
+          
+          // Log the GA4 request details (sensitive data redacted)
+          logger.info('Sending GA4 request', {
+            hasToken: !!ga4Token,
+            hasAccountId: !!accountId,
+            accountId: accountId,
+            targetWebhookUrl
+          });
         }
         
         // Ensure webhook URL is absolute
@@ -278,17 +322,64 @@ router.post('/send', isAuthenticated, async (req, res) => {
           signal: controller.signal
         });
         
+        // Log webhook response status and headers
+        logger.info('Received webhook response:', {
+          status: webhookResponse.status,
+          statusText: webhookResponse.statusText,
+          contentType: webhookResponse.headers.get('content-type'),
+          contentLength: webhookResponse.headers.get('content-length'),
+          isGoogleAnalyticsAgent: isGoogleAnalyticsAgent,
+          webhookUrl: targetWebhookUrl
+        });
+        
         if (!webhookResponse.ok) {
           const errorText = await webhookResponse.text();
           logger.error(`Webhook responded with status: ${webhookResponse.status}`, {
             statusText: webhookResponse.statusText,
-            errorText,
-            targetWebhookUrl
+            errorText: errorText.substring(0, 500), // Log a larger portion of the error
+            targetWebhookUrl,
+            accountId,
+            headers: Object.fromEntries([...webhookResponse.headers.entries()])
           });
           throw new Error(`Webhook responded with status: ${webhookResponse.status} - ${errorText}`);
         }
         
-        responseData = await webhookResponse.json();
+        // Get the response content, handling possible non-JSON responses
+        const responseText = await webhookResponse.text();
+        
+        // Log the raw response for debugging
+        logger.info('Raw webhook response text:', {
+          length: responseText.length,
+          preview: responseText.substring(0, 200),
+          isGoogleAnalyticsAgent,
+          contentType: webhookResponse.headers.get('content-type')
+        });
+        
+        try {
+          // Try to parse as JSON first
+          responseData = JSON.parse(responseText);
+          
+          // Log basic structure of parsed data
+          logger.info('Successfully parsed webhook response as JSON:', {
+            type: typeof responseData,
+            isArray: Array.isArray(responseData),
+            length: Array.isArray(responseData) ? responseData.length : null,
+            keys: typeof responseData === 'object' && !Array.isArray(responseData) && responseData !== null ? 
+              Object.keys(responseData) : null
+          });
+        } catch (parseError) {
+          // If response is not valid JSON, log the error and use the raw text as the response
+          logger.error('Failed to parse webhook response as JSON:', {
+            parseError: parseError.message,
+            responsePreview: responseText.substring(0, 300), // Log more of the response for debugging
+            accountId,
+            contentType: webhookResponse.headers.get('content-type'),
+            isGoogleAnalyticsAgent
+          });
+          
+          // Use the raw text as response data
+          responseData = responseText;
+        }
       }
       
       clearTimeout(timeoutId);
@@ -346,47 +437,111 @@ router.post('/send', isAuthenticated, async (req, res) => {
 
 /**
  * Extracts content from various response formats
- * @param {Object|Array} responseData - The response data from the webhook
+ * @param {Object|Array|string} responseData - The response data from the webhook
  * @returns {string} - The extracted content
  */
 function extractResponseContent(responseData) {
-  // If it's a simple string, return it
-  if (typeof responseData === 'string') {
-    return responseData;
-  }
-  
-  // If it's an array with objects that have an 'output' field (GA4 format)
-  if (Array.isArray(responseData) && responseData.length > 0) {
-    const firstItem = responseData[0];
-    if (firstItem && typeof firstItem === 'object') {
-      if (firstItem.output) return firstItem.output;
-      if (firstItem.response) return firstItem.response;
-      if (firstItem.content) return firstItem.content;
-    }
-    // If it's an array of strings or simple values, join them
-    return responseData.map(item => 
-      typeof item === 'object' ? JSON.stringify(item) : String(item)
-    ).join('\n');
-  }
-  
-  // If it's an object, look for common response fields
-  if (responseData && typeof responseData === 'object') {
-    if (responseData.response) return responseData.response;
-    if (responseData.content) return responseData.content;
-    if (responseData.output) return responseData.output;
-    if (responseData.text) return responseData.text;
-    if (responseData.message) return responseData.message;
+  try {
+    // Log the response structure for debugging
+    logger.info('Extracting content from webhook response:', {
+      type: typeof responseData,
+      isArray: Array.isArray(responseData),
+      isNull: responseData === null,
+      isUndefined: responseData === undefined,
+      structure: responseData === null || responseData === undefined ? 'empty' : 
+        typeof responseData === 'object' ? 
+          (Array.isArray(responseData) ? 
+            `Array[${responseData.length}]` : 
+            `Object with keys: ${Object.keys(responseData).join(', ')}`) : 
+          typeof responseData
+    });
     
-    // If no common fields found, stringify the object
-    try {
-      return JSON.stringify(responseData, null, 2);
-    } catch (e) {
-      logger.error('Error stringifying response data:', e);
+    // Handle null or undefined
+    if (responseData === null || responseData === undefined) {
+      logger.warn('Received null or undefined response from webhook');
+      return 'No response content received from the webhook';
     }
+    
+    // If it's a simple string, return it
+    if (typeof responseData === 'string') {
+      return responseData;
+    }
+    
+    // If it's an array with objects
+    if (Array.isArray(responseData)) {
+      if (responseData.length === 0) {
+        return 'No data returned from the query';
+      }
+      
+      // Special case for GA4 response format which sometimes returns an array of objects
+      if (responseData.length > 0) {
+        const firstItem = responseData[0];
+        
+        // Check for common fields in the first item
+        if (firstItem && typeof firstItem === 'object') {
+          // Common field names in various webhook responses
+          const possibleFields = ['output', 'response', 'content', 'text', 'message', 'result'];
+          
+          for (const field of possibleFields) {
+            if (firstItem[field] !== undefined) {
+              return firstItem[field];
+            }
+          }
+          
+          // If no specific field is found but the object can be converted to string
+          if (firstItem.toString && firstItem.toString() !== '[object Object]') {
+            return firstItem.toString();
+          }
+        }
+      }
+      
+      // If we couldn't extract from a specific field, join the array items
+      try {
+        return responseData.map(item => 
+          typeof item === 'object' ? 
+            (item === null ? 'null' : JSON.stringify(item)) : 
+            String(item)
+        ).join('\n');
+      } catch (e) {
+        logger.error('Error mapping array response:', e);
+        return 'Error processing array response data';
+      }
+    }
+    
+    // If it's an object, look for common response fields
+    if (typeof responseData === 'object') {
+      // Check common field names in object responses
+      const possibleFields = ['response', 'content', 'output', 'text', 'message', 'result', 'data'];
+      
+      for (const field of possibleFields) {
+        if (responseData[field] !== undefined) {
+          // If the field is an object or array, stringify it
+          if (typeof responseData[field] === 'object') {
+            try {
+              return JSON.stringify(responseData[field], null, 2);
+            } catch (e) {
+              logger.error(`Error stringifying responseData.${field}:`, e);
+            }
+          } else {
+            return String(responseData[field]);
+          }
+        }
+      }
+      
+      // If no common fields found, try to stringify the entire object
+      try {
+        return JSON.stringify(responseData, null, 2);
+      } catch (e) {
+        logger.error('Error stringifying entire response data:', e);
+      }
+    }
+    
+    // Fallback if nothing is found or if there's an error
+    return 'No recognized response format found';
+  } catch (error) {
+    logger.error('Error extracting response content:', error);
+    return 'Error processing response from webhook';
   }
-  
-  // Fallback if nothing is found
-  return 'No response content';
 }
 
 // Rename a conversation session
