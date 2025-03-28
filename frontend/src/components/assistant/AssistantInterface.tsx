@@ -590,12 +590,19 @@ export default function AssistantInterface() {
   }, [isResizingLeft, isResizingRight]);
 
   // Updated render function to include the agent badge in the UI
-  const renderAgentBadge = (conversation: Conversation) => {
+  const renderAgentBadge = (conversation: {
+    agent?: {
+      name: string;
+      webhookUrl: string;
+      icon: string;
+      description: string;
+    };
+  }) => {
     if (!conversation.agent) return null;
     
     return (
-      <div className="flex items-center">
-        <div className="bg-blue-100 text-blue-600 p-1 rounded-full">
+      <div className="flex items-center bg-blue-50 px-1 py-0.5 rounded-full text-xs">
+        <div className="bg-blue-100 text-blue-600 p-0.5 rounded-full">
           {conversation.agent.icon === 'database' && (
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
