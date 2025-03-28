@@ -241,7 +241,12 @@ router.post('/send', isAuthenticated, async (req, res) => {
     
     // Use AbortController to set a timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3 * 60 * 1000); // 3 minute timeout
+    
+    // Set a longer timeout for Google Analytics requests
+    const timeoutDuration = isGoogleAnalyticsAgent ? 8 * 60 * 1000 : 3 * 60 * 1000; // 8 minutes for GA4, 3 minutes for others
+    logger.info(`Setting request timeout: ${timeoutDuration/1000} seconds for ${isGoogleAnalyticsAgent ? 'GA4' : 'standard'} request`);
+    
+    const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
     
     // Prepare webhook request payload
     let requestPayload = {
@@ -316,7 +321,13 @@ router.post('/send', isAuthenticated, async (req, res) => {
         const webhookResponse = await fetch(targetWebhookUrl, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            // Add timeout hints for proxies and n8n
+            ...(isGoogleAnalyticsAgent ? {
+              'X-Request-Timeout': '420', // Request 420 seconds (7 minutes) timeout
+              'Connection': 'keep-alive',
+              'Keep-Alive': 'timeout=420' // Hint to keep connection alive for 7 minutes
+            } : {})
           },
           body: JSON.stringify(requestPayload),
           signal: controller.signal

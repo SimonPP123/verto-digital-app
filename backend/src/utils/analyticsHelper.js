@@ -88,14 +88,22 @@ async function processAnalyticsQuery(requestData) {
       ga4AccountId: processedAccountId
     };
     
+    // Log timeout settings
+    logger.info('Making request to n8n with timeout settings:', {
+      axiosTimeout: 300000, // 5 minutes
+      message: 'Increased timeout for complex GA4 queries'
+    });
+    
     try {
       // Forward the request to n8n with the token and account ID
       const response = await axios.post(n8nUrl, n8nPayload, {
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          // Add a hint to n8n about our desired timeout
+          'X-Request-Timeout': '300' // Request 300 seconds if n8n supports it
         },
-        // Add a reasonable timeout
-        timeout: 120000 // 2 minutes
+        // Increase axios timeout to maximum value
+        timeout: 300000 // 5 minutes - axios timeout
       });
       
       // Log some basic info about the response
@@ -135,6 +143,8 @@ async function processAnalyticsQuery(requestData) {
       // Enhanced error handling for axios errors
       logger.error('Error in axios request to n8n:', {
         error: axiosError.message,
+        code: axiosError.code,
+        isTimeout: axiosError.code === 'ECONNABORTED' || axiosError.message.includes('timeout'),
         status: axiosError.response?.status,
         responseData: axiosError.response?.data 
           ? (typeof axiosError.response.data === 'string' 
@@ -146,6 +156,33 @@ async function processAnalyticsQuery(requestData) {
         timeout: axiosError.code === 'ECONNABORTED' ? 'Request timed out' : null
       });
       
+      // Handle various timeout scenarios
+      if (axiosError.code === 'ECONNABORTED' || axiosError.message.includes('timeout')) {
+        logger.error('Request to n8n timed out:', {
+          timeoutValue: 300000,
+          errorCode: axiosError.code,
+          errorMessage: axiosError.message
+        });
+        
+        return [{
+          output: "Your Google Analytics query timed out after 5 minutes. This typically happens with complex queries over large date ranges. Please try:\n\n1. Narrowing your date range\n2. Simplifying your query\n3. Breaking your question into smaller, more specific questions"
+        }];
+      }
+      
+      // Handle 504 Gateway Timeout errors specifically
+      if (axiosError.response?.status === 504) {
+        logger.error('Received 504 Gateway Timeout from n8n or proxy:', {
+          responseHeaders: axiosError.response.headers,
+          responseData: typeof axiosError.response.data === 'string' 
+            ? axiosError.response.data.substring(0, 200) 
+            : JSON.stringify(axiosError.response.data)
+        });
+        
+        return [{
+          output: "The analytics server timed out while processing your request. This likely means your query is too complex or covers too much data. Please try narrowing your question to a specific time period or metric."
+        }];
+      }
+      
       // If we have response data, throw that, otherwise rethrow the original error
       if (axiosError.response?.data) {
         if (typeof axiosError.response.data === 'string') {
@@ -153,10 +190,6 @@ async function processAnalyticsQuery(requestData) {
         } else {
           throw new Error(`N8N Error: ${JSON.stringify(axiosError.response.data)}`);
         }
-      }
-      
-      if (axiosError.code === 'ECONNABORTED') {
-        throw new Error('Request to Google Analytics timed out. Please try again with a simpler query.');
       }
       
       throw new Error(`Failed to query GA4: ${axiosError.message}`);
