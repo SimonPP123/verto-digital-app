@@ -4,7 +4,7 @@ const router = express.Router();
 const logger = require('../utils/logger');
 const url = require('url');
 
-// Helper function to get the appropriate redirect URL
+// Helper function to get the appropriate redirect URL for after authentication
 const getRedirectUrl = (req) => {
   // Check if we have origin in the session (set during login initiation)
   if (req.session && req.session.authOrigin) {
@@ -30,7 +30,14 @@ const getRedirectUrl = (req) => {
   return process.env.FRONTEND_URL;
 };
 
-// Google OAuth login route
+// Helper function to get the full URL including protocol, host and port
+const getFullUrl = (req, path) => {
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  return `${protocol}://${host}${path}`;
+};
+
+// Google OAuth login route with dynamic callback URL
 router.get('/google',
   (req, res, next) => {
     logger.info('Initiating Google OAuth login');
@@ -55,12 +62,29 @@ router.get('/google',
       }
     }
     
-    next();
-  },
-  passport.authenticate('google', { 
-    scope: ['profile', 'email'],
-    prompt: 'select_account'
-  })
+    // Get the host being used for this request
+    const host = req.headers.host;
+    logger.info(`Request host: ${host}`);
+    
+    // Save full URL for the callback in the session
+    const fullCallbackUrl = getFullUrl(req, '/api/auth/google/callback');
+    logger.info(`Using callback URL: ${fullCallbackUrl}`);
+    req.session.callbackUrl = fullCallbackUrl;
+    
+    // Must save session before redirect to Google
+    req.session.save((err) => {
+      if (err) {
+        logger.error('Error saving session:', err);
+      }
+      
+      // Use authenticate with the correct callbackURL for this request
+      passport.authenticate('google', {
+        scope: ['profile', 'email'],
+        prompt: 'select_account',
+        callbackURL: fullCallbackUrl
+      })(req, res, next);
+    });
+  }
 );
 
 // Google OAuth callback route
@@ -68,12 +92,23 @@ router.get('/google/callback',
   (req, res, next) => {
     logger.info('Received Google OAuth callback');
     logger.info(`Session ID: ${req.sessionID}`);
-    next();
+    
+    // Get the callback URL from the session or generate it again
+    let callbackUrl = req.session.callbackUrl;
+    if (!callbackUrl) {
+      callbackUrl = getFullUrl(req, '/api/auth/google/callback');
+      logger.info(`No callback URL in session, generated: ${callbackUrl}`);
+    } else {
+      logger.info(`Using callback URL from session: ${callbackUrl}`);
+    }
+    
+    // Use the same callback URL for verification
+    passport.authenticate('google', {
+      failureRedirect: '/api/auth/failure',
+      callbackURL: callbackUrl,
+      session: true
+    })(req, res, next);
   },
-  passport.authenticate('google', { 
-    failureRedirect: '/api/auth/failure',
-    session: true
-  }),
   (req, res) => {
     if (!req.user) {
       logger.error('Authentication failed: No user data');

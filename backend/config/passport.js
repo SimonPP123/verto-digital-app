@@ -3,25 +3,18 @@ const logger = require('../src/utils/logger');
 const User = require('../src/models/User');
 
 module.exports = function(passport) {
-  // Configure dynamic callback URL based on environment
-  let callbackURL = process.env.GOOGLE_CALLBACK_URL;
-  
-  // In production, ensure callback URL matches the domain
-  if (process.env.NODE_ENV === 'production') {
-    // Use a relative path that will work with any domain
-    callbackURL = '/api/auth/google/callback';
-    logger.info(`Using relative callback URL in production: ${callbackURL}`);
-  } else {
-    logger.info(`Using configured callback URL: ${callbackURL}`);
-  }
+  // We'll set the callback URL dynamically per-request
+  const baseCallbackPath = '/api/auth/google/callback';
   
   passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: callbackURL,
-    proxy: true // Important for handling proxied requests correctly
+    callbackURL: baseCallbackPath,
+    proxy: true,
+    // This is the key change - pass a function to dynamically determine the callback URL
+    passReqToCallback: true
   },
-  async (accessToken, refreshToken, profile, done) => {
+  async (req, accessToken, refreshToken, profile, done) => {
     try {
       const email = profile.emails[0].value;
       
