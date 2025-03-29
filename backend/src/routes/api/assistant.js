@@ -203,6 +203,12 @@ router.post('/send', isAuthenticated, async (req, res) => {
       targetWebhookUrl = conversation.agent.webhookUrl;
     }
     
+    // Special case for GA4 agent: set the right webhook URL
+    if ((isGoogleAnalyticsAgent || conversation.agent?.name === 'Google Analytics 4') && !targetWebhookUrl) {
+      logger.info('Setting default webhook URL for GA4 agent');
+      targetWebhookUrl = '/api/analytics/query';
+    }
+    
     // If still no webhook URL, use the default from environment variables
     if (!targetWebhookUrl) {
       targetWebhookUrl = process.env.N8N_DEFAULT_ASSISTANT_WEBHOOK;
@@ -282,11 +288,14 @@ router.post('/send', isAuthenticated, async (req, res) => {
       let responseData;
       
       // Special handling for GA4 agent with internal endpoint
-      if (isGoogleAnalyticsAgent && targetWebhookUrl === '/api/analytics/query') {
+      if ((isGoogleAnalyticsAgent && targetWebhookUrl === '/api/analytics/query') || 
+         (!isGoogleAnalyticsAgent && conversation.agent?.name === 'Google Analytics 4')) {
         logger.info('Processing Google Analytics 4 query directly', { 
           accountId,
           hasAccountId: !!accountId,
-          trimmedAccountId: accountId ? accountId.trim() : null
+          trimmedAccountId: accountId ? accountId.trim() : null,
+          isGoogleAnalyticsAgent,
+          agentName: conversation.agent?.name
         });
         
         // Check if we should use the asynchronous pattern
@@ -317,12 +326,24 @@ router.post('/send', isAuthenticated, async (req, res) => {
             messageNumber: conversation.messages.length // Use the current message count as messageNumber
           };
           
-          // Ensure webhook URL is absolute
-          let fullWebhookUrl = targetWebhookUrl;
-          if (targetWebhookUrl.startsWith('/')) {
+          // Get the actual webhook URL to use
+          let fullWebhookUrl;
+          if (targetWebhookUrl === '/api/analytics/query') {
+            // If it's the internal endpoint, use the backend URL
+            const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
+            fullWebhookUrl = `${backendUrl}${targetWebhookUrl}`;
+          } else if (targetWebhookUrl.startsWith('/')) {
+            // For any other relative URL, convert to absolute
             fullWebhookUrl = `${process.env.BACKEND_URL}${targetWebhookUrl}`;
-            logger.info(`Converted relative webhook URL to absolute: ${fullWebhookUrl}`);
+          } else {
+            // Already absolute
+            fullWebhookUrl = targetWebhookUrl;
           }
+          
+          logger.info(`Using webhook URL for GA4: ${fullWebhookUrl}`, {
+            original: targetWebhookUrl,
+            converted: fullWebhookUrl
+          });
           
           // Start a background process to send the request
           (async () => {
