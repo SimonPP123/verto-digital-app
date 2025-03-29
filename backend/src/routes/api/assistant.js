@@ -277,399 +277,100 @@ router.post('/send', isAuthenticated, async (req, res) => {
       }));
     }
     
+    // For normal webhook handling (non-async agents)
     try {
       let responseData;
       
-      // Special handling for GA4 agent with internal endpoint
-      if (isGoogleAnalyticsAgent && targetWebhookUrl === '/api/analytics/query') {
-        logger.info('Processing Google Analytics 4 query directly', { 
-          accountId,
+      // Check if this is a Google Analytics 4 agent request
+      if (isGoogleAnalyticsAgent) {
+        // Include token if available
+        if (ga4Token) {
+          requestPayload.accessToken = ga4Token;
+        }
+        
+        // Log the GA4 request details
+        logger.info('Sending GA4 request via axios', { 
+          hasToken: !!ga4Token,
           hasAccountId: !!accountId,
-          trimmedAccountId: accountId ? accountId.trim() : null
+          targetWebhookUrl
         });
         
-        // Check if this is a Google Analytics 4 agent and implement async pattern
-        if (conversation.agent?.name === 'Google Analytics 4') {
-          logger.info('Processing Google Analytics 4 request asynchronously', {
-            conversationId
-          });
-          
-          // Create a placeholder response message
-          const processingMessage = {
-            role: 'assistant',
-            content: 'Processing your Google Analytics request...',
-            timestamp: new Date()
-          };
-          
-          // Add the processing message to the conversation
-          conversation.messages.push(processingMessage);
-          conversation.updatedAt = new Date();
-          await conversation.save();
-          
-          // Use production URL for callbacks in all environments
-          const forcedBaseUrl = 'https://bolt.vertodigital.com';
-          const callbackUrl = `${forcedBaseUrl}/api/analytics/ga4/callback?conversationId=${conversationId}`;
-          const callbackUrlWithPath = `${forcedBaseUrl}/api/analytics/ga4/callback/${conversationId}`;
-          const statusUrl = `${forcedBaseUrl}/api/analytics/ga4/status/${conversationId}`;
-          
-          // Add the useCallback flag to the payload - simplify structure for n8n
-          const asyncPayload = {
-            message: requestPayload.message,
-            conversationId,
-            userId: requestPayload.userId,
-            accessToken: ga4Token,
-            ga4AccountId: accountId || '',
-            history: requestPayload.history,
-            useCallback: true,
-            callbackUrl,
-            callbackUrlWithPath, // Add path-based URL as an alternative
-            messageNumber: Math.max(1, conversation.messages.length - 1) // Fix messageNumber to be 1 for first message
-          };
-          
-          // Start a background process to send the request to n8n
-          (async () => {
-            try {
-              // Get the direct n8n webhook URL from environment variables
-              const n8nUrl = process.env.N8N_GOOGLE_ANALYTICS_4;
-              
-              if (!n8nUrl) {
-                throw new Error('N8N_GOOGLE_ANALYTICS_4 environment variable is not set');
-              }
-              
-              // Log the token status for debugging
-              logger.info('Sending GA4 request to n8n:', {
-                hasToken: !!ga4Token,
-                tokenType: typeof ga4Token,
-                tokenLength: ga4Token ? ga4Token.length : 0,
-                urlLength: n8nUrl.length,
-                messageNumber: asyncPayload.messageNumber,
-                payloadStructure: Object.keys(asyncPayload),
-                n8nUrl,
-                callbackUrl
-              });
-              
-              // Use axios instead of fetch for better Node.js compatibility
-              try {
-                // Set a longer timeout for GA4 requests
-                const axiosResponse = await axios.post(n8nUrl, asyncPayload, {
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'X-Request-Timeout': '300', // Request 300 seconds timeout
-                    'User-Agent': 'VertoDigital/AI-Assistant/1.0'
-                  },
-                  timeout: 60000 // 60 second connection timeout
-                });
-                
-                logger.info('Successfully sent GA4 request asynchronously with callback', {
-                  conversationId,
-                  n8nUrl,
-                  callbackUrl,
-                  callbackUrlWithPath,
-                  statusUrl,
-                  messageNumber: asyncPayload.messageNumber,
-                  responseStatus: axiosResponse.status
-                });
-              } catch (axiosError) {
-                // Detailed logging for axios errors
-                logger.error('Error in GA4 axios request to n8n:', {
-                  message: axiosError.message,
-                  code: axiosError.code,
-                  isTimeout: axiosError.code === 'ECONNABORTED',
-                  status: axiosError.response?.status,
-                  statusText: axiosError.response?.statusText,
-                  data: axiosError.response?.data ? 
-                    (typeof axiosError.response.data === 'string' ? 
-                      axiosError.response.data.substring(0, 500) : 
-                      JSON.stringify(axiosError.response.data).substring(0, 500)) : 
-                    'No response data',
-                  url: n8nUrl
-                });
-                
-                throw new Error(`Error connecting to n8n: ${axiosError.message}`);
-              }
-            } catch (error) {
-              logger.error('Background GA4 request failed:', error, {
-                conversationId
-              });
-              
-              // Update the conversation with error
-              try {
-                // Format the error message to be more user-friendly
-                let errorMessage = {
-                  role: 'assistant',
-                  content: 'Error sending request to Google Analytics. ',
-                  timestamp: new Date()
-                };
-                
-                // Add more helpful details based on the error
-                if (error.message.includes('ECONNREFUSED') || error.message.includes('ETIMEDOUT')) {
-                  errorMessage.content += 'Could not connect to the analytics service. Please try again later.';
-                } else if (error.message.includes('status: 401') || error.message.includes('status: 403')) {
-                  errorMessage.content += 'Authentication error. Please re-authenticate with Google Analytics.';
-                } else if (error.message.includes('status: 404')) {
-                  errorMessage.content += 'The analytics service endpoint was not found. Please contact support.';
-                } else if (error.message.includes('status: 500')) {
-                  errorMessage.content += 'The analytics service encountered an internal error. Please try again later.';
-                } else {
-                  errorMessage.content += `Error details: ${error.message}`;
-                }
-                
-                // Find and replace the processing message
-                const updatedConversation = await AssistantConversation.findOne({ conversationId });
-                if (updatedConversation) {
-                  const processingIndex = updatedConversation.messages.findIndex(
-                    msg => msg.role === 'assistant' && msg.content === 'Processing your Google Analytics request...'
-                  );
-                  
-                  logger.info('Updating conversation with error message:', {
-                    conversationId,
-                    foundProcessingMessage: processingIndex !== -1,
-                    errorMessage: errorMessage.content
-                  });
-                  
-                  if (processingIndex !== -1) {
-                    updatedConversation.messages[processingIndex] = errorMessage;
-                  } else {
-                    updatedConversation.messages.push(errorMessage);
-                  }
-                  
-                  updatedConversation.updatedAt = new Date();
-                  await updatedConversation.save();
-                  
-                  logger.info('Successfully updated conversation with error message', {
-                    conversationId
-                  });
-                }
-              } catch (dbError) {
-                logger.error('Failed to update conversation with error message:', dbError);
-              }
-            }
-          })();
-          
-          // Return the conversation with the processing message
-          return res.json({
-            success: true,
-            response: processingMessage.content,
-            updatedConversation: conversation
-          });
-        } else {
-          // Legacy synchronous call (use only for compatibility)
-          responseData = await processAnalyticsQuery({
-            ...requestPayload,
-            accessToken: ga4Token
-          });
-        }
+        // Use axios for GA4 requests to avoid fetch issues
+        const axiosResponse = await axios.post(targetWebhookUrl, requestPayload, {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Request-Timeout': '420', // 7 minutes timeout
+            'User-Agent': 'VertoDigital/AI-Assistant/1.0'
+          },
+          timeout: 8 * 60 * 1000 // 8 minute connection timeout
+        });
+        
+        responseData = axiosResponse.data;
+        
+        logger.info('Received GA4 axios response', {
+          status: axiosResponse.status,
+          contentType: axiosResponse.headers['content-type'],
+          dataType: typeof responseData
+        });
       } 
-      // Add special handling for BigQuery agent - use asynchronous callback pattern
-      else if (conversation.agent?.name === 'BigQuery Agent') {
-        logger.info('Processing BigQuery request asynchronously', {
-          conversationId
-        });
-        
-        // Create a placeholder response message
-        const processingMessage = {
-          role: 'assistant',
-          content: 'Processing your BigQuery request...',
-          timestamp: new Date()
-        };
-        
-        // Add the processing message to the conversation
-        conversation.messages.push(processingMessage);
-        conversation.updatedAt = new Date();
-        await conversation.save();
-        
-        // Use production URL for callbacks in all environments
-        const forcedBaseUrl = 'https://bolt.vertodigital.com';
-        
-        // Create callback URLs that n8n can use directly - simplified for better compatibility
-        const callbackUrlSimple = `${forcedBaseUrl}/api/assistant/bigquery/callback`;
-        const callbackUrlWithPath = `${forcedBaseUrl}/api/assistant/bigquery/callback/${conversationId}`;
-        
-        // Add callback URLs to the payload
-        const callbackPayload = {
-          ...requestPayload,
-          callbackUrl: callbackUrlWithPath,
-          callbackUrlWithQuery: callbackUrlSimple,
-          conversationId, // Add explicitly at the top level for easier access
-          useCallback: true,
-          messageNumber: Math.max(1, conversation.messages.length - 1) // Fix messageNumber to be 1 for first message
-        };
-        
-        // Start a background process to send the request to n8n
-        (async () => {
-          try {
-            // Get the direct n8n webhook URL from environment variables
-            const n8nUrl = process.env.N8N_BIGQUERY;
-            
-            if (!n8nUrl) {
-              throw new Error('N8N_BIGQUERY environment variable is not set');
-            }
-            
-            // Make a direct request to the n8n webhook URL
-            const response = await fetch(n8nUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-Request-Timeout': '300' // Request 300 seconds timeout
-              },
-              body: JSON.stringify(callbackPayload)
-            });
-            
-            if (!response.ok) {
-              throw new Error(`N8N responded with status: ${response.status}`);
-            }
-            
-            logger.info('Successfully sent BigQuery request asynchronously', {
-              conversationId,
-              n8nUrl,
-              callbackUrlWithPath,
-              callbackUrlWithQuery: callbackUrlSimple,
-              messageNumber: callbackPayload.messageNumber
-            });
-          } catch (error) {
-            logger.error('Background BigQuery request failed:', error, {
-              conversationId
-            });
-            
-            // Update the conversation with error
-            try {
-              const errorMessage = {
-                role: 'assistant',
-                content: `Error sending request to BigQuery: ${error.message}`,
-                timestamp: new Date()
-              };
-              
-              // Find and replace the processing message
-              const updatedConversation = await AssistantConversation.findOne({ conversationId });
-              if (updatedConversation) {
-                const processingIndex = updatedConversation.messages.findIndex(
-                  msg => msg.role === 'assistant' && msg.content === 'Processing your BigQuery request...'
-                );
-                
-                if (processingIndex !== -1) {
-                  updatedConversation.messages[processingIndex] = errorMessage;
-                } else {
-                  updatedConversation.messages.push(errorMessage);
-                }
-                
-                updatedConversation.updatedAt = new Date();
-                await updatedConversation.save();
-              }
-            } catch (dbError) {
-              logger.error('Failed to update conversation with error message:', dbError);
-            }
-          }
-        })();
-        
-        // Return the conversation with the processing message
-        return res.json({
-          success: true,
-          response: processingMessage.content,
-          updatedConversation: conversation
-        });
-      } else {
-        // For all other cases, continue with normal webhook request
-        
-        // If this is a Google Analytics 4 agent and we have a token, include it
-        if (isGoogleAnalyticsAgent) {
-          if (ga4Token) {
-            requestPayload.accessToken = ga4Token;
-          }
-          
-          // Log the GA4 request details (sensitive data redacted)
-          logger.info('Sending GA4 request', {
-            hasToken: !!ga4Token,
-            hasAccountId: !!accountId,
-            accountId: accountId,
-            targetWebhookUrl
-          });
-        }
-        
+      else {
+        // For non-GA4 agents - use fetch
         // Ensure webhook URL is absolute
         if (targetWebhookUrl.startsWith('/')) {
           targetWebhookUrl = `${process.env.BACKEND_URL}${targetWebhookUrl}`;
           logger.info(`Converted relative webhook URL to absolute: ${targetWebhookUrl}`);
         }
-      
-        // Send the message to the webhook
+        
+        // Send message to webhook
         const webhookResponse = await fetch(targetWebhookUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            // Add timeout hints for proxies and n8n
-            ...(isGoogleAnalyticsAgent ? {
-              'X-Request-Timeout': '420', // Request 420 seconds (7 minutes) timeout
-              'Connection': 'keep-alive',
-              'Keep-Alive': 'timeout=420' // Hint to keep connection alive for 7 minutes
-            } : {})
+            'X-Request-Timeout': '300' // 5 minutes timeout
           },
           body: JSON.stringify(requestPayload),
           signal: controller.signal
         });
         
-        // Log webhook response status and headers
+        // Log response info
         logger.info('Received webhook response:', {
           status: webhookResponse.status,
           statusText: webhookResponse.statusText,
-          contentType: webhookResponse.headers.get('content-type'),
-          contentLength: webhookResponse.headers.get('content-length'),
-          isGoogleAnalyticsAgent: isGoogleAnalyticsAgent,
-          webhookUrl: targetWebhookUrl
+          contentType: webhookResponse.headers.get('content-type')
         });
         
+        // Check for error status
         if (!webhookResponse.ok) {
           const errorText = await webhookResponse.text();
-          logger.error(`Webhook responded with status: ${webhookResponse.status}`, {
+          logger.error(`Webhook error status: ${webhookResponse.status}`, {
             statusText: webhookResponse.statusText,
-            errorText: errorText.substring(0, 500), // Log a larger portion of the error
-            targetWebhookUrl,
-            accountId,
-            headers: Object.fromEntries([...webhookResponse.headers.entries()])
+            errorPreview: errorText.substring(0, 500)
           });
           throw new Error(`Webhook responded with status: ${webhookResponse.status} - ${errorText}`);
         }
         
-        // Get the response content, handling possible non-JSON responses
+        // Get response content
         const responseText = await webhookResponse.text();
         
-        // Log the raw response for debugging
-        logger.info('Raw webhook response text:', {
+        // Log response preview
+        logger.info('Raw webhook response:', {
           length: responseText.length,
-          preview: responseText.substring(0, 200),
-          isGoogleAnalyticsAgent,
-          contentType: webhookResponse.headers.get('content-type')
+          preview: responseText.substring(0, 200)
         });
         
+        // Try to parse as JSON
         try {
-          // Try to parse as JSON first
           responseData = JSON.parse(responseText);
-          
-          // Log basic structure of parsed data
-          logger.info('Successfully parsed webhook response as JSON:', {
-            type: typeof responseData,
-            isArray: Array.isArray(responseData),
-            length: Array.isArray(responseData) ? responseData.length : null,
-            keys: typeof responseData === 'object' && !Array.isArray(responseData) && responseData !== null ? 
-              Object.keys(responseData) : null
-          });
         } catch (parseError) {
-          // If response is not valid JSON, log the error and use the raw text as the response
-          logger.error('Failed to parse webhook response as JSON:', {
-            parseError: parseError.message,
-            responsePreview: responseText.substring(0, 300), // Log more of the response for debugging
-            accountId,
-            contentType: webhookResponse.headers.get('content-type'),
-            isGoogleAnalyticsAgent
-          });
-          
-          // Use the raw text as response data
-          responseData = responseText;
+          logger.error('JSON parse error:', parseError.message);
+          responseData = responseText; // Use raw text if not JSON
         }
       }
       
+      // Clear the request timeout
       clearTimeout(timeoutId);
       
-      // Add the assistant response to the conversation
+      // Add assistant response to conversation
       const assistantMessage = {
         role: 'assistant',
         content: extractResponseContent(responseData),
@@ -680,19 +381,19 @@ router.post('/send', isAuthenticated, async (req, res) => {
       conversation.updatedAt = new Date();
       await conversation.save();
       
-      // Return the response to the client
+      // Return success response
       return res.json({
         success: true,
         response: assistantMessage.content,
         updatedConversation: conversation
       });
-    } catch (webhookError) {
+    } 
+    catch (webhookError) {
+      // Clear timeout and handle error
       clearTimeout(timeoutId);
-      
-      // Handle webhook-specific errors
       logger.error('Webhook request error:', webhookError);
       
-      // Add an error message to the conversation
+      // Add error message to conversation
       const errorMessage = {
         role: 'assistant',
         content: `I'm sorry, I encountered an error while processing your request. ${webhookError.message}`,
@@ -703,6 +404,7 @@ router.post('/send', isAuthenticated, async (req, res) => {
       conversation.updatedAt = new Date();
       await conversation.save();
       
+      // Return error response
       return res.status(500).json({
         success: false,
         error: 'Failed to process message via webhook',
