@@ -20,6 +20,7 @@ const GoogleAnalyticsAuth = require('../models/GoogleAnalyticsAuth');
 const crypto = require('crypto');
 const User = require('../models/User');
 const mongoose = require('mongoose');
+const google = require('googleapis');
 
 // Create uploads directory if it doesn't exist
 const uploadDir = path.join(__dirname, '../../uploads');
@@ -2351,8 +2352,15 @@ router.delete('/analytics/google-analytics/:id', isAuthenticated, async (req, re
 
 // Google Analytics 4 Authentication Routes
 
-// Helper function to get the appropriate callback URL for Google Analytics
-const getGACallbackUrl = (req) => {
+// Helper function to get the GA4 callback URL for processing requests
+const getGACallbackUrl = (req, conversationId) => {
+  // Always use production URL for callbacks regardless of environment
+  const forcedBaseUrl = 'https://bolt.vertodigital.com';
+  return `${forcedBaseUrl}/api/analytics/ga4/callback?conversationId=${conversationId}`;
+};
+
+// Helper function to get the Google Auth callback URL
+const getGAAuthCallbackUrl = (req) => {
   // Always use the production URL for callbacks in production
   const forcedBaseUrl = 'https://bolt.vertodigital.com';
   
@@ -2372,11 +2380,11 @@ const getGACallbackUrl = (req) => {
       devBaseUrl = req.headers.origin;
     }
     
-    logger.info('Using Google Analytics callback base URL for development:', devBaseUrl);
+    logger.info('Using Google Analytics auth callback base URL for development:', devBaseUrl);
     return `${devBaseUrl}/api/analytics/auth/callback`;
   }
   
-  logger.info('Using production callback URL for Google Analytics:', forcedBaseUrl);
+  logger.info('Using production auth callback URL for Google Analytics:', forcedBaseUrl);
   return `${forcedBaseUrl}/api/analytics/auth/callback`;
 };
 
@@ -2441,7 +2449,7 @@ router.get('/analytics/auth/google', isAuthenticated, (req, res) => {
         'https://www.googleapis.com/auth/analytics.readonly'
       ];
       
-      const redirectUri = getGACallbackUrl(req);
+      const redirectUri = getGAAuthCallbackUrl(req);
       
       // Create the authorization URL
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
@@ -2523,7 +2531,7 @@ router.get('/analytics/auth/callback', isAuthenticated, async (req, res) => {
     }
     
     // Exchange the authorization code for tokens
-    const redirectUri = getGACallbackUrl(req);
+    const redirectUri = getGAAuthCallbackUrl(req);
     
     const tokenResponse = await axios.post(
       'https://oauth2.googleapis.com/token',
@@ -2744,8 +2752,6 @@ router.post('/analytics/query', isAuthenticated, async (req, res) => {
 
 // Add a callback endpoint for GA4 responses from n8n
 router.post('/analytics/ga4/callback', express.text({ type: '*/*' }), async (req, res) => {
-  let conversationId = null;
-  
   try {
     // Get raw content from request body
     let rawContent = req.body;
@@ -2763,7 +2769,7 @@ router.post('/analytics/ga4/callback', express.text({ type: '*/*' }), async (req
     });
 
     // Extract the conversation ID from query params
-    conversationId = req.query.conversationId;
+    let conversationId = req.query.conversationId;
     
     // If it's JSON content, try to parse and get conversationId from body
     if (contentType.includes('application/json') && typeof rawContent === 'string') {
@@ -2908,14 +2914,10 @@ router.post('/analytics/ga4/callback', express.text({ type: '*/*' }), async (req
 
   } catch (error) {
     logger.error('Error handling GA4 callback:', error);
-    
-    // Always return 200 OK to n8n to prevent it from retrying
-    // This prevents possible duplicate messages in the conversation
-    return res.json({
+    res.status(500).json({
       success: false,
-      message: 'Error processing GA4 callback, but received by server',
-      error: error.message,
-      conversationId: conversationId
+      message: 'Failed to handle GA4 callback',
+      error: error.message
     });
   }
 });
@@ -3063,115 +3065,5 @@ function extractResponseContentFromGa4(responseData) {
     return 'Error processing response from Google Analytics 4';
   }
 }
-
-// Add a path-based callback endpoint for GA4 responses from n8n
-router.post('/analytics/ga4/callback/:conversationId', express.text({ type: '*/*' }), async (req, res) => {
-  let conversationId = null;
-  
-  try {
-    // Get raw content from request body
-    let rawContent = req.body;
-    let contentType = req.headers['content-type'] || 'text/plain';
-    
-    // Log that we hit this endpoint
-    logger.info('Received GA4 callback with path param:', {
-      conversationId: req.params.conversationId,
-      url: req.originalUrl,
-      method: req.method,
-      contentType,
-      contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown',
-      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string'
-    });
-    
-    // Extract the conversation ID from params
-    conversationId = req.params.conversationId;
-    
-    if (!conversationId) {
-      logger.error('No conversation ID found in request params');
-      throw new Error('No conversation ID provided in GA4 callback URL path');
-    }
-
-    // Find the conversation
-    const Conversation = mongoose.model('AssistantConversation');
-    const conversation = await Conversation.findOne({ conversationId });
-
-    if (!conversation) {
-      logger.error(`Conversation with ID ${conversationId} not found`);
-      throw new Error(`Conversation with ID ${conversationId} not found`);
-    }
-
-    // Process the content and extract the actual response
-    let responseContent = '';
-    
-    if (typeof rawContent === 'object' && rawContent !== null) {
-      // It's already parsed JSON
-      responseContent = extractResponseContentFromGa4(rawContent);
-    } else if (typeof rawContent === 'string') {
-      // Try to parse as JSON first
-      try {
-        const parsedContent = JSON.parse(rawContent);
-        responseContent = extractResponseContentFromGa4(parsedContent);
-      } catch (parseError) {
-        // If parsing fails, use the raw content
-        responseContent = rawContent;
-      }
-    } else {
-      responseContent = 'Received callback with unknown content format';
-    }
-
-    logger.info('Processed response content from path param callback:', {
-      conversationId,
-      contentLength: typeof responseContent === 'string' ? responseContent.length : 'not a string',
-      contentPreview: typeof responseContent === 'string' ? responseContent.substring(0, 200) : 'not a string'
-    });
-
-    // Update the conversation with the response
-    // Find the last message with "Processing..." content
-    const processingMessageIndex = conversation.messages.findIndex(
-      msg => msg.role === 'assistant' && msg.content === 'Processing your Google Analytics request...'
-    );
-
-    if (processingMessageIndex !== -1) {
-      // Replace the processing message with the actual response
-      conversation.messages[processingMessageIndex] = {
-        role: 'assistant',
-        content: responseContent,
-        timestamp: new Date()
-      };
-    } else {
-      // If no processing message found, add a new assistant message
-      conversation.messages.push({
-        role: 'assistant',
-        content: responseContent,
-        timestamp: new Date()
-      });
-    }
-
-    conversation.updatedAt = new Date();
-    await conversation.save();
-
-    logger.info('Successfully updated conversation with path-based GA4 callback', {
-      conversationId,
-      responseLength: typeof responseContent === 'string' ? responseContent.length : 'not a string'
-    });
-
-    // Return success to n8n
-    res.json({
-      success: true,
-      message: 'GA4 response processed successfully via path param',
-      conversationId
-    });
-  } catch (error) {
-    logger.error('Error in GA4 path parameter handler:', error);
-    
-    // Always return 200 OK to n8n to prevent it from retrying
-    return res.json({
-      success: false,
-      message: 'Error processing GA4 path-based callback, but received by server',
-      error: error.message,
-      conversationId
-    });
-  }
-});
 
 module.exports = router; 
