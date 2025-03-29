@@ -2648,22 +2648,12 @@ router.post('/analytics/query', isAuthenticated, async (req, res) => {
       logger.info('Processing GA4 request asynchronously', {
         userId,
         conversationId,
-        useCallback: true,
-        requestBody: {
-          ...req.body,
-          accessToken: req.body.accessToken ? '[REDACTED]' : undefined
-        }
+        useCallback: true
       });
       
       // Generate callback URL
       const callbackBaseUrl = process.env.BACKEND_URL || 'http://localhost:5001';
       const callbackUrl = `${callbackBaseUrl}/api/analytics/ga4/callback?conversationId=${conversationId}`;
-      
-      logger.info('Generated callback URL for GA4 request:', {
-        callbackUrl,
-        baseUrl: callbackBaseUrl,
-        n8nUrl
-      });
       
       // Start background process to make the request
       (async () => {
@@ -2733,10 +2723,7 @@ router.post('/analytics/ga4/callback', express.text({ type: '*/*' }), async (req
     logger.info('Received GA4 callback:', {
       contentType,
       contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown',
-      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string',
-      requestUrl: req.url,
-      queryParams: req.query,
-      headers: req.headers
+      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string'
     });
 
     // Extract the conversation ID from query params

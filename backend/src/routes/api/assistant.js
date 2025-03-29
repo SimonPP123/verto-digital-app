@@ -203,12 +203,6 @@ router.post('/send', isAuthenticated, async (req, res) => {
       targetWebhookUrl = conversation.agent.webhookUrl;
     }
     
-    // Special case for GA4 agent: set the right webhook URL
-    if ((isGoogleAnalyticsAgent || conversation.agent?.name === 'Google Analytics 4') && !targetWebhookUrl) {
-      logger.info('Setting default webhook URL for GA4 agent');
-      targetWebhookUrl = '/api/analytics/query';
-    }
-    
     // If still no webhook URL, use the default from environment variables
     if (!targetWebhookUrl) {
       targetWebhookUrl = process.env.N8N_DEFAULT_ASSISTANT_WEBHOOK;
@@ -260,8 +254,7 @@ router.post('/send', isAuthenticated, async (req, res) => {
       message,
       userId: req.user._id,
       userName: req.user.name,
-      userEmail: req.user.email,
-      messageNumber: conversation.messages.length // Add messageNumber
+      userEmail: req.user.email
     };
     
     // Add GA4 account ID if available
@@ -288,20 +281,15 @@ router.post('/send', isAuthenticated, async (req, res) => {
       let responseData;
       
       // Special handling for GA4 agent with internal endpoint
-      if ((isGoogleAnalyticsAgent && targetWebhookUrl === '/api/analytics/query') || 
-         (!isGoogleAnalyticsAgent && conversation.agent?.name === 'Google Analytics 4')) {
+      if (isGoogleAnalyticsAgent && targetWebhookUrl === '/api/analytics/query') {
         logger.info('Processing Google Analytics 4 query directly', { 
           accountId,
           hasAccountId: !!accountId,
-          trimmedAccountId: accountId ? accountId.trim() : null,
-          isGoogleAnalyticsAgent,
-          agentName: conversation.agent?.name
+          trimmedAccountId: accountId ? accountId.trim() : null
         });
         
-        // Check if we should use the asynchronous pattern
-        const useAsyncPattern = true; // Flag to enable async for GA4 agent
-        
-        if (useAsyncPattern) {
+        // Check if this is a Google Analytics 4 agent and implement async pattern
+        if (conversation.agent?.name === 'Google Analytics 4') {
           logger.info('Processing Google Analytics 4 request asynchronously', {
             conversationId
           });
@@ -318,46 +306,46 @@ router.post('/send', isAuthenticated, async (req, res) => {
           conversation.updatedAt = new Date();
           await conversation.save();
           
+          // Generate callback URL
+          const callbackBaseUrl = process.env.BACKEND_URL || 'http://localhost:5001';
+          const callbackUrl = `${callbackBaseUrl}/api/analytics/ga4/callback?conversationId=${conversationId}`;
+          
           // Add the useCallback flag to the payload
           const asyncPayload = {
             ...requestPayload,
             accessToken: ga4Token,
             useCallback: true,
-            messageNumber: conversation.messages.length // Use the current message count as messageNumber
+            messageNumber: conversation.messages.length, // Add message number parameter
+            callbackUrl
           };
           
-          // Get the actual webhook URL to use
-          let fullWebhookUrl;
-          if (targetWebhookUrl === '/api/analytics/query') {
-            // If it's the internal endpoint, use the backend URL
-            const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
-            fullWebhookUrl = `${backendUrl}${targetWebhookUrl}`;
-          } else if (targetWebhookUrl.startsWith('/')) {
-            // For any other relative URL, convert to absolute
-            fullWebhookUrl = `${process.env.BACKEND_URL}${targetWebhookUrl}`;
-          } else {
-            // Already absolute
-            fullWebhookUrl = targetWebhookUrl;
-          }
-          
-          logger.info(`Using webhook URL for GA4: ${fullWebhookUrl}`, {
-            original: targetWebhookUrl,
-            converted: fullWebhookUrl
-          });
-          
-          // Start a background process to send the request
+          // Start a background process to send the request to n8n
           (async () => {
             try {
-              await fetch(fullWebhookUrl, {
+              // Get the direct n8n webhook URL from environment variables
+              const n8nUrl = process.env.N8N_GOOGLE_ANALYTICS_4;
+              
+              if (!n8nUrl) {
+                throw new Error('N8N_GOOGLE_ANALYTICS_4 environment variable is not set');
+              }
+              
+              // Make a direct request to the n8n webhook URL instead of using processAnalyticsQuery
+              const response = await fetch(n8nUrl, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
+                  'X-Request-Timeout': '300' // Request 300 seconds timeout
                 },
                 body: JSON.stringify(asyncPayload)
               });
-              logger.info('Successfully sent GA4 request asynchronously', {
+              
+              if (!response.ok) {
+                throw new Error(`N8N responded with status: ${response.status}`);
+              }
+              
+              logger.info('Successfully sent GA4 request asynchronously with callback', {
                 conversationId,
-                targetWebhookUrl: fullWebhookUrl
+                n8nUrl
               });
             } catch (error) {
               logger.error('Background GA4 request failed:', error, {
@@ -440,29 +428,36 @@ router.post('/send', isAuthenticated, async (req, res) => {
           messageNumber: conversation.messages.length // Add message number parameter
         };
         
-        // Ensure webhook URL is absolute
-        if (targetWebhookUrl.startsWith('/')) {
-          targetWebhookUrl = `${process.env.BACKEND_URL}${targetWebhookUrl}`;
-          logger.info(`Converted relative webhook URL to absolute: ${targetWebhookUrl}`);
-        }
-        
         // Start a background process to send the request to n8n
-        // We don't await this to avoid holding up the response to the client
         (async () => {
           try {
-            await fetch(targetWebhookUrl, {
+            // Get the direct n8n webhook URL from environment variables
+            const n8nUrl = process.env.N8N_BIGQUERY;
+            
+            if (!n8nUrl) {
+              throw new Error('N8N_BIGQUERY environment variable is not set');
+            }
+            
+            // Make a direct request to the n8n webhook URL
+            const response = await fetch(n8nUrl, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
+                'X-Request-Timeout': '300' // Request 300 seconds timeout
               },
               body: JSON.stringify(callbackPayload)
             });
-            logger.info('Successfully sent BigQuery request to n8n with callback', {
+            
+            if (!response.ok) {
+              throw new Error(`N8N responded with status: ${response.status}`);
+            }
+            
+            logger.info('Successfully sent BigQuery request asynchronously', {
               conversationId,
-              targetWebhookUrl
+              n8nUrl
             });
           } catch (error) {
-            logger.error('Background BigQuery request to n8n failed:', error, {
+            logger.error('Background BigQuery request failed:', error, {
               conversationId
             });
             
@@ -502,8 +497,7 @@ router.post('/send', isAuthenticated, async (req, res) => {
           response: processingMessage.content,
           updatedConversation: conversation
         });
-      }
-      else {
+      } else {
         // For all other cases, continue with normal webhook request
         
         // If this is a Google Analytics 4 agent and we have a token, include it
@@ -764,179 +758,6 @@ function extractResponseContent(responseData) {
     return 'Error processing response from webhook';
   }
 }
-
-// Add a new callback endpoint for BigQuery agent
-router.post('/bigquery/callback', express.text({ type: '*/*' }), async (req, res) => {
-  try {
-    // Get raw content from request body
-    let rawContent = req.body;
-    let contentType = req.headers['content-type'] || 'text/plain';
-    
-    logger.info('Received BigQuery callback:', {
-      contentType,
-      contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown',
-      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string'
-    });
-
-    // Extract the conversation ID from query params or body
-    let conversationId = req.query.conversationId;
-    
-    // If it's JSON content, try to parse and get conversationId from body
-    if (contentType.includes('application/json') && typeof rawContent === 'string') {
-      try {
-        const jsonContent = JSON.parse(rawContent);
-        if (!conversationId && jsonContent.conversationId) {
-          conversationId = jsonContent.conversationId;
-          logger.info('Extracted conversationId from JSON body:', { conversationId });
-          rawContent = jsonContent; // Use the parsed JSON for later processing
-        }
-      } catch (parseError) {
-        logger.error('Error parsing JSON content in callback:', parseError);
-        // Continue with raw content
-      }
-    }
-    
-    // If no conversationId in query params or JSON body, check URL path
-    if (!conversationId && req.path.includes('/callback/')) {
-      const pathParts = req.path.split('/');
-      conversationId = pathParts[pathParts.length - 1];
-      logger.info('Using conversationId from URL path:', { conversationId });
-    }
-
-    if (!conversationId) {
-      throw new Error('No conversation ID provided in callback');
-    }
-
-    // Find the conversation
-    const conversation = await AssistantConversation.findOne({ conversationId });
-
-    if (!conversation) {
-      throw new Error(`Conversation with ID ${conversationId} not found`);
-    }
-
-    // Process the content and extract the actual response
-    let responseContent = '';
-    
-    if (typeof rawContent === 'object' && rawContent !== null) {
-      // It's already parsed JSON
-      responseContent = extractResponseContent(rawContent);
-    } else if (typeof rawContent === 'string') {
-      // Try to parse as JSON first
-      try {
-        const parsedContent = JSON.parse(rawContent);
-        responseContent = extractResponseContent(parsedContent);
-      } catch (parseError) {
-        // If parsing fails, use the raw content
-        responseContent = rawContent;
-      }
-    } else {
-      responseContent = 'Received callback with unknown content format';
-    }
-
-    // Update the conversation with the response
-    // Find the last message with "Processing..." content
-    const processingMessageIndex = conversation.messages.findIndex(
-      msg => msg.role === 'assistant' && msg.content === 'Processing your BigQuery request...'
-    );
-
-    if (processingMessageIndex !== -1) {
-      // Replace the processing message with the actual response
-      conversation.messages[processingMessageIndex] = {
-        role: 'assistant',
-        content: responseContent,
-        timestamp: new Date()
-      };
-    } else {
-      // If no processing message found, add a new assistant message
-      conversation.messages.push({
-        role: 'assistant',
-        content: responseContent,
-        timestamp: new Date()
-      });
-    }
-
-    conversation.updatedAt = new Date();
-    await conversation.save();
-
-    logger.info('Successfully updated conversation with BigQuery callback response', {
-      conversationId,
-      responseLength: typeof responseContent === 'string' ? responseContent.length : 'not a string'
-    });
-
-    // Return success to n8n
-    res.json({
-      success: true,
-      message: 'BigQuery response processed successfully',
-      conversationId
-    });
-
-  } catch (error) {
-    logger.error('Error handling BigQuery callback:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to handle BigQuery callback',
-      error: error.message
-    });
-  }
-});
-
-// Add endpoint to check BigQuery response status
-router.get('/bigquery/status/:conversationId', isAuthenticated, async (req, res) => {
-  try {
-    const { conversationId } = req.params;
-    
-    if (!conversationId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing conversation ID'
-      });
-    }
-    
-    // Find the conversation
-    const conversation = await AssistantConversation.findOne({
-      conversationId,
-      user: req.user._id
-    });
-    
-    if (!conversation) {
-      return res.status(404).json({
-        success: false,
-        error: 'Conversation not found'
-      });
-    }
-    
-    // Check if there's a processing message
-    const isProcessing = conversation.messages.some(
-      msg => msg.role === 'assistant' && msg.content === 'Processing your BigQuery request...'
-    );
-    
-    if (isProcessing) {
-      return res.json({
-        success: true,
-        status: 'processing',
-        message: 'Your BigQuery request is still being processed.'
-      });
-    } else {
-      // Get the last assistant message as the response
-      const lastAssistantMessage = [...conversation.messages]
-        .reverse()
-        .find(msg => msg.role === 'assistant');
-      
-      return res.json({
-        success: true,
-        status: 'completed',
-        message: lastAssistantMessage ? lastAssistantMessage.content : 'No response available.'
-      });
-    }
-  } catch (error) {
-    logger.error('Error checking BigQuery status:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to check BigQuery status',
-      message: error.message
-    });
-  }
-});
 
 // Rename a conversation session
 router.patch('/conversations/:conversationId/rename', isAuthenticated, async (req, res) => {

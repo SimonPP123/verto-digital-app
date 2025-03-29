@@ -408,7 +408,6 @@ export default function AssistantInterface() {
         console.log('GA4 Account ID:', ga4AccountId);
         if (!ga4AccountId) {
           setError('Google Analytics 4 Account ID is required. Please create a new conversation and provide the account ID.');
-          setIsSendingMessage(false);
           return;
         }
       }
