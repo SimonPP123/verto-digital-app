@@ -432,17 +432,12 @@ router.post('/send', isAuthenticated, async (req, res) => {
         conversation.updatedAt = new Date();
         await conversation.save();
         
-        // Generate callback URLs
-        const callbackBaseUrl = req.get('x-forwarded-host') ? 
-          `https://${req.get('x-forwarded-host')}` : 
-          req.get('host') ? 
-            `https://${req.get('host')}` : 
-            process.env.BACKEND_URL || 'http://localhost:5001';
-        
         // Use production URL for callbacks in all environments
         const forcedBaseUrl = 'https://bolt.vertodigital.com';
-        const callbackUrlWithQuery = `${forcedBaseUrl}/api/assistant/bigquery/callback?conversationId=${conversationId}`;
-        const callbackUrlWithPath = `${forcedBaseUrl}/api/assistant/bigquery/callback/${conversationId}`;
+        
+        // Create callback URLs that n8n can use directly - ensure properly encoded
+        const callbackUrlWithQuery = encodeURI(`${forcedBaseUrl}/api/assistant/bigquery/callback?conversationId=${conversationId}`);
+        const callbackUrlWithPath = encodeURI(`${forcedBaseUrl}/api/assistant/bigquery/callback/${conversationId}`);
         
         // Add callback URLs to the payload
         const callbackPayload = {
@@ -1139,53 +1134,42 @@ router.get('/conversations/:conversationId/export', isAuthenticated, async (req,
   }
 });
 
-// Add a callback endpoint for BigQuery responses from n8n
-router.post('/bigquery/callback', express.text({ type: '*/*' }), async (req, res) => {
+// Add a route to handle callback with conversation ID in path
+router.post('/bigquery/callback/:conversationId', express.text({ type: '*/*' }), async (req, res) => {
   try {
+    // Log that we hit this endpoint
+    logger.info('Received BigQuery callback with path param:', {
+      conversationId: req.params.conversationId,
+      url: req.originalUrl,
+      method: req.method
+    });
+    
+    // Add the conversation ID to the query params
+    req.query.conversationId = req.params.conversationId;
+    
     // Get raw content from request body
     let rawContent = req.body;
     let contentType = req.headers['content-type'] || 'text/plain';
     
-    logger.info('Received BigQuery callback:', {
+    logger.info('Processing path param callback with details:', {
       contentType,
       contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown',
-      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string',
-      url: req.originalUrl
+      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string'
     });
-
-    // Extract the conversation ID from query params
-    let conversationId = req.query.conversationId;
     
-    // If it's JSON content, try to parse and get conversationId from body
-    if (contentType.includes('application/json') && typeof rawContent === 'string') {
-      try {
-        const jsonContent = JSON.parse(rawContent);
-        if (!conversationId && jsonContent.conversationId) {
-          conversationId = jsonContent.conversationId;
-          logger.info('Extracted conversationId from JSON body:', { conversationId });
-          rawContent = jsonContent; // Use the parsed JSON for later processing
-        }
-      } catch (parseError) {
-        logger.error('Error parsing JSON content in BigQuery callback:', parseError);
-        // Continue with raw content
-      }
-    }
+    // Extract the conversation ID from params
+    let conversationId = req.params.conversationId;
     
-    // If no conversationId in query params or JSON body, check URL path
-    if (!conversationId && req.path.includes('/callback/')) {
-      const pathParts = req.path.split('/');
-      conversationId = pathParts[pathParts.length - 1];
-      logger.info('Using conversationId from URL path:', { conversationId });
-    }
-
     if (!conversationId) {
-      throw new Error('No conversation ID provided in BigQuery callback');
+      logger.error('No conversation ID found in request params');
+      throw new Error('No conversation ID provided in BigQuery callback URL path');
     }
 
     // Find the conversation
     const conversation = await AssistantConversation.findOne({ conversationId });
 
     if (!conversation) {
+      logger.error(`Conversation with ID ${conversationId} not found`);
       throw new Error(`Conversation with ID ${conversationId} not found`);
     }
 
@@ -1207,6 +1191,12 @@ router.post('/bigquery/callback', express.text({ type: '*/*' }), async (req, res
     } else {
       responseContent = 'Received callback with unknown content format';
     }
+
+    logger.info('Processed response content from path param callback:', {
+      conversationId,
+      contentLength: typeof responseContent === 'string' ? responseContent.length : 'not a string',
+      contentPreview: typeof responseContent === 'string' ? responseContent.substring(0, 200) : 'not a string'
+    });
 
     // Update the conversation with the response
     // Find the last message with "Processing..." content
@@ -1233,7 +1223,7 @@ router.post('/bigquery/callback', express.text({ type: '*/*' }), async (req, res
     conversation.updatedAt = new Date();
     await conversation.save();
 
-    logger.info('Successfully updated conversation with BigQuery callback response', {
+    logger.info('Successfully updated conversation with path-based BigQuery callback', {
       conversationId,
       responseLength: typeof responseContent === 'string' ? responseContent.length : 'not a string'
     });
@@ -1241,12 +1231,11 @@ router.post('/bigquery/callback', express.text({ type: '*/*' }), async (req, res
     // Return success to n8n
     res.json({
       success: true,
-      message: 'BigQuery response processed successfully',
+      message: 'BigQuery response processed successfully via path param',
       conversationId
     });
-
   } catch (error) {
-    logger.error('Error handling BigQuery callback:', error);
+    logger.error('Error in path parameter handler:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to handle BigQuery callback',
@@ -1309,6 +1298,152 @@ router.get('/bigquery/status/:conversationId', isAuthenticated, async (req, res)
       success: false,
       error: 'Failed to check BigQuery status',
       message: error.message
+    });
+  }
+});
+
+// Add a callback endpoint for BigQuery responses from n8n (query param version)
+router.post('/bigquery/callback', express.text({ type: '*/*' }), async (req, res) => {
+  try {
+    // Get raw content from request body
+    let rawContent = req.body;
+    let contentType = req.headers['content-type'] || 'text/plain';
+    
+    logger.info('Received BigQuery callback (query param version):', {
+      contentType,
+      contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown',
+      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string',
+      url: req.originalUrl,
+      path: req.path,
+      query: req.query,
+      baseUrl: req.baseUrl,
+      method: req.method,
+      headers: req.headers
+    });
+    
+    // Extract the conversation ID from query params
+    let conversationId = req.query.conversationId;
+    
+    // If it's JSON content, try to parse and get conversationId from body
+    if (contentType.includes('application/json') && typeof rawContent === 'string') {
+      try {
+        const jsonContent = JSON.parse(rawContent);
+        logger.info('Parsed JSON content:', {
+          hasConversationId: !!jsonContent.conversationId,
+          contentKeys: Object.keys(jsonContent),
+          bodyPreview: JSON.stringify(jsonContent).substring(0, 200)
+        });
+        
+        if (!conversationId && jsonContent.conversationId) {
+          conversationId = jsonContent.conversationId;
+          logger.info('Extracted conversationId from JSON body:', { conversationId });
+          rawContent = jsonContent; // Use the parsed JSON for later processing
+        }
+        
+        // Try to extract from nested structures that n8n might send
+        if (!conversationId && jsonContent.body && typeof jsonContent.body === 'object') {
+          if (jsonContent.body.conversationId) {
+            conversationId = jsonContent.body.conversationId;
+            logger.info('Extracted conversationId from JSON body.conversationId:', { conversationId });
+          }
+        }
+      } catch (parseError) {
+        logger.error('Error parsing JSON content in BigQuery callback:', parseError);
+        // Continue with raw content
+      }
+    }
+    
+    if (!conversationId) {
+      logger.error('No conversation ID found in request:', { 
+        body: typeof rawContent === 'string' ? rawContent.substring(0, 500) : 'non-string body',
+        query: req.query,
+        path: req.path
+      });
+      throw new Error('No conversation ID provided in BigQuery callback');
+    }
+
+    // Find the conversation
+    const conversation = await AssistantConversation.findOne({ conversationId });
+
+    if (!conversation) {
+      logger.error(`Conversation with ID ${conversationId} not found`);
+      throw new Error(`Conversation with ID ${conversationId} not found`);
+    }
+
+    // Process the content and extract the actual response
+    let responseContent = '';
+    
+    if (typeof rawContent === 'object' && rawContent !== null) {
+      // It's already parsed JSON
+      responseContent = extractResponseContent(rawContent);
+    } else if (typeof rawContent === 'string') {
+      // Try to parse as JSON first
+      try {
+        const parsedContent = JSON.parse(rawContent);
+        responseContent = extractResponseContent(parsedContent);
+      } catch (parseError) {
+        // If parsing fails, use the raw content
+        responseContent = rawContent;
+      }
+    } else {
+      responseContent = 'Received callback with unknown content format';
+    }
+
+    logger.info('Processed response content:', {
+      conversationId,
+      contentLength: typeof responseContent === 'string' ? responseContent.length : 'not a string',
+      contentPreview: typeof responseContent === 'string' ? responseContent.substring(0, 200) : 'not a string'
+    });
+
+    // Update the conversation with the response
+    // Find the last message with "Processing..." content
+    const processingMessageIndex = conversation.messages.findIndex(
+      msg => msg.role === 'assistant' && msg.content === 'Processing your BigQuery request...'
+    );
+    
+    logger.info('Processing message search result:', {
+      foundProcessingMessage: processingMessageIndex !== -1,
+      processingIndex: processingMessageIndex,
+      messagesCount: conversation.messages.length
+    });
+
+    if (processingMessageIndex !== -1) {
+      // Replace the processing message with the actual response
+      conversation.messages[processingMessageIndex] = {
+        role: 'assistant',
+        content: responseContent,
+        timestamp: new Date()
+      };
+    } else {
+      // If no processing message found, add a new assistant message
+      conversation.messages.push({
+        role: 'assistant',
+        content: responseContent,
+        timestamp: new Date()
+      });
+    }
+
+    conversation.updatedAt = new Date();
+    await conversation.save();
+
+    logger.info('Successfully updated conversation with BigQuery callback response', {
+      conversationId,
+      responseLength: typeof responseContent === 'string' ? responseContent.length : 'not a string'
+    });
+
+    // Return success to n8n
+    res.json({
+      success: true,
+      message: 'BigQuery response processed successfully',
+      conversationId
+    });
+
+  } catch (error) {
+    logger.error('Error handling BigQuery callback:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to handle BigQuery callback',
+      error: error.message
     });
   }
 });
