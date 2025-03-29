@@ -2397,9 +2397,10 @@ router.get('/analytics/auth/status', isAuthenticated, async (req, res) => {
       // TODO: Implement token refresh logic here
     }
     
-    // User is authenticated with GA4
+    // User is authenticated with GA4 - include the access token in the response
     return res.json({
-      authenticated: true
+      authenticated: true,
+      accessToken: auth.accessToken // Include the access token for the client
     });
   } catch (error) {
     logger.error('Error checking GA4 auth status:', error);

@@ -319,6 +319,14 @@ router.post('/send', isAuthenticated, async (req, res) => {
             callbackUrl
           };
           
+          // Log token status (redacted for security)
+          logger.info('GA4 access token status:', {
+            hasToken: !!ga4Token,
+            tokenLength: ga4Token ? ga4Token.length : 0,
+            isNull: ga4Token === null,
+            isUndefined: ga4Token === undefined
+          });
+          
           // Start a background process to send the request to n8n
           (async () => {
             try {
