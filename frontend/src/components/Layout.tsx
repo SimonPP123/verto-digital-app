@@ -101,9 +101,9 @@ export default function Layout({ children }: LayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-verto-gray-light">
+    <div className="min-h-screen bg-verto-gray-light flex flex-col">
       <nav className="bg-white shadow-md sticky top-0 z-50 border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full max-w-full mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -115,7 +115,7 @@ export default function Layout({ children }: LayoutProps) {
                     height={40} 
                     className="mr-2"
                   />
-                  <span className="text-xl font-bold text-verto-blue-primary hover:text-verto-blue-dark transition-colors">
+                  <span className="text-lg sm:text-xl font-bold text-verto-blue-primary hover:text-verto-blue-dark transition-colors">
                     VertoDigital
                   </span>
                 </Link>
@@ -326,33 +326,33 @@ export default function Layout({ children }: LayoutProps) {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="flex-grow w-full px-3 py-4 sm:px-4 sm:py-5 md:px-6 md:py-6 lg:px-8 lg:py-6">
         {children}
       </main>
 
-      <footer className="bg-white shadow-md mt-8 border-t border-gray-200">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <footer className="bg-white shadow-md border-t border-gray-200 mt-auto">
+        <div className="w-full mx-auto py-4 sm:py-5 md:py-6 px-3 sm:px-4 md:px-6 lg:px-8">
           <div className="flex justify-center">
             <div className="text-center">
-              <Link href="/" className="flex items-center justify-center mb-4">
+              <Link href="/" className="flex items-center justify-center mb-3 sm:mb-4">
                 <Image 
                   src="/VertoDigital-symbol-color.png" 
                   alt="VertoDigital Logo" 
-                  width={32} 
-                  height={32} 
-                  className="mr-2"
+                  width={28} 
+                  height={28} 
+                  className="mr-2 sm:w-8 sm:h-8"
                 />
-                <span className="text-lg font-bold text-verto-blue-primary">
+                <span className="text-base sm:text-lg font-bold text-verto-blue-primary">
                   VertoDigital
                 </span>
               </Link>
-              <p className="text-sm text-gray-600">
+              <p className="text-xs sm:text-sm text-gray-600">
                 AI-powered tools for digital marketing
               </p>
             </div>
           </div>
-          <div className="mt-6 border-t border-gray-200 pt-6">
-            <p className="text-center text-sm text-gray-500">
+          <div className="mt-4 sm:mt-6 border-t border-gray-200 pt-4 sm:pt-6">
+            <p className="text-center text-xs sm:text-sm text-gray-500">
               © {new Date().getFullYear()} VertoDigital. All rights reserved.
             </p>
           </div>

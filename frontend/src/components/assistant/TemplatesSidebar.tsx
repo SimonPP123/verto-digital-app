@@ -2,9 +2,20 @@
 
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { TemplateVariable } from './TemplateVariablesModal';
 
-type Template = {
+// Update the TemplateVariable type to match what's in TemplateVariablesModal
+export type VariableType = 'text' | 'select' | 'multiChoice' | 'date' | 'dateRange';
+
+export type TemplateVariable = {
+  _id?: string;
+  name: string;
+  description: string;
+  defaultValue: string;
+  type: VariableType;
+  options?: string; // For select type variables, we'll store as newline-separated string
+};
+
+export type Template = {
   _id: string;
   title: string;
   content: string;
@@ -213,59 +224,67 @@ export default function TemplatesSidebar({
   });
   
   return (
-    <div className="h-full flex flex-col">
-      <div className="p-4 border-b border-gray-200">
-        <h2 className="text-xl font-bold text-gray-800 mb-4">Templates</h2>
-        
-        <button
-          onClick={handleAddTemplate}
-          className="w-full py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors flex items-center justify-center mb-4"
-        >
-          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          New Template
-        </button>
-        
-        <div className="px-3 py-2">
-          <div className="relative">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-2">
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <div className="flex flex-col h-full">
+      <div className="p-3 sm:p-4 border-b border-gray-200">
+        <div className="flex flex-col space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-700">Templates</h2>
+            <button
+              onClick={handleAddTemplate}
+              className="text-xs sm:text-sm px-2 py-1 sm:px-3 sm:py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              + New Template
+            </button>
+          </div>
+          
+          <div className="flex items-center space-x-2 w-full">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search templates..."
+                className="w-full pl-8 pr-3 py-1.5 text-sm rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              />
+              <svg 
+                className="w-4 h-4 absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-            </span>
-            <input 
-              type="text" 
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search templates..." 
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
-            />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-        
-        <div className="flex items-center mb-2">
-          <input
-            type="checkbox"
-            id="show-public-only"
-            checked={showPublicOnly}
-            onChange={() => setShowPublicOnly(!showPublicOnly)}
-            className="mr-2"
-          />
-          <label htmlFor="show-public-only" className="text-sm text-gray-600">
-            Show public templates only
-          </label>
+          
+          <div className="flex items-center">
+            <label className="flex items-center text-xs sm:text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={showPublicOnly}
+                onChange={(e) => setShowPublicOnly(e.target.checked)}
+                className="mr-2 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              Show public templates only
+            </label>
+          </div>
         </div>
       </div>
       
       {showTemplateForm ? (
-        <div className="p-4 overflow-y-auto">
-          <h3 className="text-lg font-semibold mb-4">
-            {editingTemplate ? 'Edit Template' : 'New Template'}
-          </h3>
-          
-          <form onSubmit={handleSubmitTemplate}>
-            <div className="mb-4">
+        <div className="p-3 sm:p-4 flex-1 overflow-y-auto">
+          <form onSubmit={handleSubmitTemplate} className="space-y-4">
+            <div>
               <label htmlFor="template-title" className="block text-sm font-medium text-gray-700 mb-1">
                 Title
               </label>
@@ -274,229 +293,196 @@ export default function TemplatesSidebar({
                 id="template-title"
                 value={templateTitle}
                 onChange={(e) => setTemplateTitle(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                 required
               />
             </div>
             
-            <div className="mb-4">
+            <div>
               <label htmlFor="template-content" className="block text-sm font-medium text-gray-700 mb-1">
                 Content
               </label>
-              <div className="flex items-end mb-1">
-                <span className="text-xs text-gray-500 ml-auto">
-                  Use {'{{'} variableName {'}}' } for variables
-                </span>
-              </div>
               <textarea
                 id="template-content"
                 value={templateContent}
                 onChange={(e) => setTemplateContent(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[150px] text-black"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                rows={8}
                 required
-              />
-              <button
-                type="button"
-                onClick={detectVariables}
-                className="mt-1 text-sm text-blue-500 hover:text-blue-700"
-              >
-                Detect Variables
-              </button>
+              ></textarea>
+              
+              <div className="mt-1 flex justify-end">
+                <button
+                  type="button"
+                  onClick={detectVariables}
+                  className="text-xs sm:text-sm px-2 py-1 text-blue-600 hover:text-blue-800"
+                >
+                  Detect Variables
+                </button>
+              </div>
             </div>
             
-            <div className="mb-4">
-              <div className="flex justify-between items-center mb-2">
+            <div>
+              <div className="flex items-center justify-between mb-1">
                 <label className="block text-sm font-medium text-gray-700">
                   Variables
                 </label>
                 <button
                   type="button"
                   onClick={handleAddVariable}
-                  className="text-sm text-blue-500 hover:text-blue-700"
+                  className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
                 >
                   + Add Variable
                 </button>
               </div>
               
-              {templateVariables.length === 0 ? (
-                <p className="text-sm text-gray-500 italic">
-                  No variables defined. Add variables or use the detect button.
-                </p>
-              ) : (
-                <div className="space-y-3">
+              {templateVariables.length > 0 ? (
+                <div className="space-y-3 max-h-60 overflow-y-auto">
                   {templateVariables.map((variable, index) => (
-                    <div key={index} className="border border-gray-200 rounded-md p-3">
-                      <div className="flex justify-between mb-2">
-                        <h4 className="text-sm font-medium">Variable {index + 1}</h4>
+                    <div key={index} className="p-2 border border-gray-200 rounded-md bg-gray-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-gray-700">Variable {index + 1}</span>
                         <button
                           type="button"
                           onClick={() => handleRemoveVariable(index)}
-                          className="text-sm text-red-500 hover:text-red-700"
+                          className="text-red-500 hover:text-red-700"
                         >
-                          Remove
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
                         </button>
                       </div>
                       
-                      <div className="mb-2">
-                        <label className="block text-xs text-gray-500 mb-1">
-                          Name
-                        </label>
-                        <input
-                          type="text"
-                          value={variable.name}
-                          onChange={(e) => handleVariableChange(index, 'name', e.target.value)}
-                          className="w-full p-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
-                          required
-                        />
-                      </div>
-                      
-                      <div className="mb-2">
-                        <label className="block text-xs text-gray-500 mb-1">
-                          Description
-                        </label>
-                        <input
-                          type="text"
-                          value={variable.description}
-                          onChange={(e) => handleVariableChange(index, 'description', e.target.value)}
-                          className="w-full p-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">
-                          Default Value
-                        </label>
-                        <input
-                          type="text"
-                          value={variable.defaultValue}
-                          onChange={(e) => handleVariableChange(index, 'defaultValue', e.target.value)}
-                          className="w-full p-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
-                        />
-                      </div>
-                      
-                      <div className="mb-2">
-                        <label className="block text-xs text-gray-500 mb-1">
-                          Variable Type
-                        </label>
-                        <select
-                          value={variable.type || 'text'}
-                          onChange={(e) => handleVariableChange(index, 'type', e.target.value)}
-                          className="w-full p-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
-                        >
-                          <option value="text">Text</option>
-                          <option value="multiChoice">Multiple Choice</option>
-                          <option value="date">Date</option>
-                          <option value="dateRange">Date Range</option>
-                        </select>
+                      <div className="space-y-2">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Name</label>
+                          <input
+                            type="text"
+                            value={variable.name}
+                            onChange={(e) => handleVariableChange(index, 'name', e.target.value)}
+                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                            required
+                          />
+                        </div>
                         
-                        {/* Variable Type Information */}
-                        <div className="mt-1 text-xs text-gray-500 italic">
-                          {variable.type === 'text' && (
-                            <p>Text: Simple text input field.</p>
-                          )}
-                          {variable.type === 'multiChoice' && (
-                            <p>Multiple Choice: Add options below that users can select from. Users can select multiple options.</p>
-                          )}
-                          {variable.type === 'date' && (
-                            <p>Date: A calendar date picker. Default value format: YYYY-MM-DD (e.g., 2023-12-31)</p>
-                          )}
-                          {variable.type === 'dateRange' && (
-                            <p>Date Range: Two calendar date pickers for start and end dates. Default value format: YYYY-MM-DD,YYYY-MM-DD (e.g., 2023-01-01,2023-12-31)</p>
-                          )}
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Description</label>
+                          <input
+                            type="text"
+                            value={variable.description}
+                            onChange={(e) => handleVariableChange(index, 'description', e.target.value)}
+                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                          />
                         </div>
-                      </div>
-                      
-                      {variable.type === 'multiChoice' && (
-                        <div className="mb-2">
-                          <label className="block text-xs text-gray-500 mb-1">
-                            Options
-                          </label>
-                          <div className="flex space-x-2 mb-2">
-                            <input
-                              type="text"
-                              value={optionInput || ''}
-                              onChange={(e) => setOptionInput(e.target.value)}
-                              placeholder="Enter an option"
-                              className="flex-1 p-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (optionInput && optionInput.trim() !== '') {
-                                  const updatedVariables = [...templateVariables];
-                                  const currentOptions = updatedVariables[index].options || [];
-                                  updatedVariables[index] = {
-                                    ...updatedVariables[index],
-                                    options: [...currentOptions, optionInput.trim()]
-                                  };
-                                  setTemplateVariables(updatedVariables);
+                        
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Default Value</label>
+                          <input
+                            type="text"
+                            value={variable.defaultValue}
+                            onChange={(e) => handleVariableChange(index, 'defaultValue', e.target.value)}
+                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Type</label>
+                          <select
+                            value={variable.type}
+                            onChange={(e) => handleVariableChange(index, 'type', e.target.value)}
+                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                          >
+                            <option value="text">Text</option>
+                            <option value="select">Select (Dropdown)</option>
+                          </select>
+                        </div>
+                        
+                        {variable.type === 'select' && (
+                          <div>
+                            <div className="flex items-center mb-1">
+                              <label className="block text-xs text-gray-600 flex-1">Options</label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!optionInput.trim()) return;
+                                  
+                                  const currentOptions = variable.options || '';
+                                  handleVariableChange(index, 'options', currentOptions ? 
+                                    `${currentOptions}\n${optionInput.trim()}` : optionInput.trim());
                                   setOptionInput('');
-                                }
-                              }}
-                              className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
-                            >
-                              Add
-                            </button>
-                          </div>
-                          {variable.options && variable.options.length > 0 ? (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {variable.options.map((opt, optIndex) => (
-                                <div key={optIndex} className="flex items-center bg-gray-100 px-2 py-1 rounded text-sm">
-                                  <span>{opt}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const updatedVariables = [...templateVariables];
-                                      const filteredOptions = (updatedVariables[index].options || []).filter(
-                                        (_, i) => i !== optIndex
-                                      );
-                                      updatedVariables[index] = {
-                                        ...updatedVariables[index],
-                                        options: filteredOptions
-                                      };
-                                      setTemplateVariables(updatedVariables);
-                                    }}
-                                    className="ml-1 text-gray-500 hover:text-red-500"
-                                  >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              ))}
+                                }}
+                                className="text-xs px-1 py-0.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                                disabled={!optionInput.trim()}
+                              >
+                                + Add
+                              </button>
                             </div>
-                          ) : (
-                            <p className="text-xs text-gray-500 italic mt-2">No options added yet</p>
-                          )}
-                        </div>
-                      )}
+                            
+                            <div className="flex mb-1">
+                              <input
+                                type="text"
+                                value={optionInput}
+                                onChange={(e) => setOptionInput(e.target.value)}
+                                className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-l focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                placeholder="Enter option value"
+                              />
+                            </div>
+                            
+                            {variable.options && variable.options.trim() && (
+                              <div className="bg-white p-1 border border-gray-200 rounded max-h-24 overflow-y-auto">
+                                <ul className="space-y-1">
+                                  {variable.options.split('\n').filter(Boolean).map((option: string, optIdx: number) => (
+                                    <li key={optIdx} className="flex items-center justify-between text-xs">
+                                      <span className="truncate">{option}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const options = variable.options?.split('\n').filter(Boolean) || [];
+                                          options.splice(optIdx, 1);
+                                          handleVariableChange(index, 'options', options.join('\n'));
+                                        }}
+                                        className="text-red-500 hover:text-red-700 ml-1"
+                                      >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 mb-2">
+                  No variables added yet. Variables allow users to customize the template.
                 </div>
               )}
             </div>
             
-            <div className="mb-6">
-              <div className="flex items-center">
+            <div>
+              <label className="flex items-center text-sm text-gray-700">
                 <input
                   type="checkbox"
-                  id="is-public"
                   checked={isPublic}
-                  onChange={() => setIsPublic(!isPublic)}
-                  className="mr-2"
+                  onChange={(e) => setIsPublic(e.target.checked)}
+                  className="mr-2 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
-                <label htmlFor="is-public" className="text-sm text-gray-700">
-                  Make this template public (visible to all users)
-                </label>
-              </div>
+                Make this template available to all users
+              </label>
             </div>
             
-            <div className="flex space-x-2">
+            <div className="flex justify-end space-x-3 pt-4">
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
               >
-                {editingTemplate ? 'Update' : 'Create'}
+                {editingTemplate ? 'Update Template' : 'Save Template'}
               </button>
               <button
                 type="button"
@@ -521,15 +507,15 @@ export default function TemplatesSidebar({
             <ul className="divide-y divide-gray-200">
               {sortedTemplates.map(template => (
                 <li key={template._id} className="relative hover:bg-gray-50">
-                  <div className="p-3">
+                  <div className="p-2 sm:p-3">
                     <div className="flex justify-between items-start">
                       <div>
                         <div className="flex items-center">
-                          <h3 className="font-medium text-gray-900 truncate max-w-[180px]">
+                          <h3 className="text-sm font-medium text-gray-900 truncate max-w-[120px] sm:max-w-[180px]">
                             {template.title}
                           </h3>
                           {template.isPublic && (
-                            <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                            <span className="ml-1 sm:ml-2 px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded-full">
                               Public
                             </span>
                           )}
@@ -561,7 +547,7 @@ export default function TemplatesSidebar({
                       </div>
                     </div>
                     
-                    <div className="mt-2 text-sm text-gray-600 line-clamp-2">
+                    <div className="mt-2 text-xs sm:text-sm text-gray-600 line-clamp-2">
                       {template.content}
                     </div>
                     
@@ -570,7 +556,7 @@ export default function TemplatesSidebar({
                         <p className="text-xs text-gray-500 mb-1">Variables:</p>
                         <div className="flex flex-wrap gap-1">
                           {template.variables.map((variable, index) => (
-                            <span key={index} className="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded-full">
+                            <span key={index} className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-700 rounded-full">
                               {variable.name}
                             </span>
                           ))}
@@ -579,7 +565,7 @@ export default function TemplatesSidebar({
                     )}
                     
                     <button
-                      className="mt-3 px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                      className="mt-2 sm:mt-3 px-2 sm:px-3 py-1 text-xs sm:text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
                       onClick={() => onUseTemplate(template)}
                     >
                       Use Template

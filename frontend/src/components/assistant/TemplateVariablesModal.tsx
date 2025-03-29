@@ -3,17 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-
-type VariableType = 'text' | 'multiChoice' | 'date' | 'dateRange';
-
-export type TemplateVariable = {
-  _id?: string; // Optional MongoDB ID
-  name: string;
-  description: string;
-  defaultValue: string;
-  type: VariableType;
-  options?: string[]; // For multiChoice variables
-};
+import { TemplateVariable, VariableType } from './TemplatesSidebar';
 
 type VariableValue = string | string[] | Date | [Date | null, Date | null];
 
@@ -169,7 +159,7 @@ export default function TemplateVariablesModal({
                 {variable.type === 'multiChoice' && (
                   <div className="space-y-2">
                     <span className="block text-xs text-gray-500 mb-1">Select one or more options:</span>
-                    {variable.options?.map(option => (
+                    {(variable.options || '').split('\n').filter(Boolean).map((option: string) => (
                       <div key={option} className="flex items-center">
                         <input
                           type="checkbox"

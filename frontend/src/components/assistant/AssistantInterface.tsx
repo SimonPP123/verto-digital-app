@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import ConversationSidebar from './ConversationSidebar';
-import TemplatesSidebar from './TemplatesSidebar';
+import TemplatesSidebar, { TemplateVariable, Template } from './TemplatesSidebar';
 import MessageDisplay from './MessageDisplay';
 import MessageControls from './MessageControls';
 import { v4 as uuidv4 } from 'uuid';
 import AgentSelectionModal from './AgentSelectionModal';
 import { format } from 'date-fns';
-import TemplateVariablesModal, { TemplateVariable } from './TemplateVariablesModal';
+import TemplateVariablesModal from './TemplateVariablesModal';
 import GA4AccountIdModal from './GA4AccountIdModal';
 
 // Define types
@@ -40,17 +40,6 @@ type Conversation = {
     description: string;
     ga4AccountId?: string;
   };
-};
-
-type Template = {
-  _id: string;
-  title: string;
-  content: string;
-  variables: TemplateVariable[];
-  isPublic: boolean;
-  user: string;
-  createdAt: string;
-  updatedAt: string;
 };
 
 export default function AssistantInterface() {
@@ -859,14 +848,23 @@ export default function AssistantInterface() {
       {/* Left Sidebar - Conversation sessions */}
       <div 
         className={`bg-white border-r border-gray-200 transition-all overflow-hidden ${
-          leftSidebarOpen ? 'block' : 'hidden'
-        }`}
-        style={{ width: leftSidebarWidth + 'px', minWidth: leftSidebarWidth + 'px' }}
+          leftSidebarOpen ? 'block' : 'hidden md:hidden'
+        } absolute md:relative z-30 shadow-lg md:shadow-none w-full md:w-auto`}
+        style={{ 
+          width: leftSidebarOpen ? (window.innerWidth < 768 ? '100%' : leftSidebarWidth + 'px') : '0px',
+          minWidth: leftSidebarOpen ? (window.innerWidth < 768 ? '100%' : leftSidebarWidth + 'px') : '0px'
+        }}
       >
         <ConversationSidebar 
           conversations={conversations}
           currentConversationId={currentConversation?.conversationId}
-          onSelectConversation={selectConversation}
+          onSelectConversation={(id) => {
+            selectConversation(id);
+            // Close sidebar on mobile after selection
+            if (window.innerWidth < 768) {
+              setLeftSidebarOpen(false);
+            }
+          }}
           onNewConversation={handleCreateNewConversation}
           onRenameConversation={renameConversation}
           onArchiveConversation={archiveConversation}
@@ -876,10 +874,10 @@ export default function AssistantInterface() {
         />
       </div>
 
-      {/* Left sidebar resizer */}
-      {leftSidebarOpen && (
+      {/* Left sidebar resizer - only on desktop */}
+      {leftSidebarOpen && window.innerWidth >= 768 && (
         <div
-          className="w-1 bg-gray-300 hover:bg-blue-500 cursor-ew-resize z-10"
+          className="w-1 bg-gray-300 hover:bg-blue-500 cursor-ew-resize z-10 hidden md:block"
           onMouseDown={handleLeftResizerMouseDown}
         />
       )}
@@ -888,8 +886,9 @@ export default function AssistantInterface() {
       <div className="flex-1 flex flex-col bg-gray-50">
         {/* Toggle left sidebar button */}
         <button
-          className="absolute top-20 left-2 z-10 p-2 rounded-full bg-white shadow-md text-gray-500 hover:text-blue-500"
+          className="fixed md:absolute top-20 left-2 z-40 p-2 rounded-full bg-white shadow-md text-gray-500 hover:text-blue-500"
           onClick={() => setLeftSidebarOpen(!leftSidebarOpen)}
+          aria-label={leftSidebarOpen ? "Close sidebar" : "Open sidebar"}
         >
           {leftSidebarOpen ? (
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -904,8 +903,9 @@ export default function AssistantInterface() {
         
         {/* Toggle right sidebar button */}
         <button
-          className="absolute top-20 right-2 z-10 p-2 rounded-full bg-white shadow-md text-gray-500 hover:text-blue-500"
+          className="fixed md:absolute top-20 right-2 z-40 p-2 rounded-full bg-white shadow-md text-gray-500 hover:text-blue-500"
           onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
+          aria-label={rightSidebarOpen ? "Close templates" : "Open templates"}
         >
           {rightSidebarOpen ? (
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -921,9 +921,9 @@ export default function AssistantInterface() {
         {currentConversation ? (
           <>
             {/* Chat Header with Agent Info */}
-            <div className="bg-white border-b border-gray-200 p-3 flex items-center justify-between">
+            <div className="bg-white border-b border-gray-200 p-2 sm:p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div className="flex items-center">
-                <h2 className="text-lg font-semibold text-gray-800 mr-2">{currentConversation.title}</h2>
+                <h2 className="text-base sm:text-lg font-semibold text-gray-800 mr-2 line-clamp-1">{currentConversation.title}</h2>
                 <button 
                   className="text-gray-500 hover:text-gray-700"
                   onClick={() => {
@@ -933,6 +933,7 @@ export default function AssistantInterface() {
                       renameConversation(currentConversation.conversationId, newTitle);
                     }
                   }}
+                  aria-label="Rename conversation"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -940,28 +941,30 @@ export default function AssistantInterface() {
                 </button>
               </div>
               {currentConversation.agent && (
-                <div className="flex items-center bg-blue-50 px-3 py-1 rounded-full">
+                <div className="flex items-center bg-blue-50 px-2 sm:px-3 py-1 rounded-full text-sm">
                   <div className="bg-blue-100 text-blue-600 p-1 rounded-full mr-2">
                     {currentConversation.agent.icon === 'database' && (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
                       </svg>
                     )}
                     {currentConversation.agent.icon === 'chart-bar' && (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                       </svg>
                     )}
                     {(!currentConversation.agent.icon || currentConversation.agent.icon === 'bot') && (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                       </svg>
                     )}
                   </div>
                   <div className="flex flex-col">
-                    <span className="font-medium text-blue-700 text-sm">{currentConversation.agent.name}</span>
+                    <span className="font-medium text-blue-700 text-xs sm:text-sm">{currentConversation.agent.name}</span>
                     {currentConversation.agent.ga4AccountId && (
-                      <span className="text-xs text-blue-600">Account ID: {currentConversation.agent.ga4AccountId}</span>
+                      <span className="text-xs text-blue-600 line-clamp-1 max-w-[150px] sm:max-w-none">
+                        ID: {currentConversation.agent.ga4AccountId}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -969,9 +972,9 @@ export default function AssistantInterface() {
             </div>
             
             {/* Chat messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
               {currentConversation.messages.length === 0 ? (
-                <div className="text-center text-gray-500 mt-10">
+                <div className="text-center text-gray-500 mt-6 sm:mt-10">
                   <p>Send a message to start a conversation</p>
                 </div>
               ) : (
@@ -995,7 +998,7 @@ export default function AssistantInterface() {
             </div>
             
             {/* Chat input */}
-            <div className="p-4 border-t border-gray-200">
+            <div className="p-2 sm:p-4 border-t border-gray-200">
               <MessageControls 
                 onSendMessage={(message) => sendMessage(message)}
                 isSending={isSendingMessage}
@@ -1027,17 +1030,20 @@ export default function AssistantInterface() {
       )}
       
       {/* Right Sidebar - Templates */}
-      <div 
-        className={`bg-white border-l border-gray-200 transition-all overflow-hidden ${
-          rightSidebarOpen ? 'block' : 'hidden'
-        }`}
-        style={{ width: rightSidebarWidth + 'px', minWidth: rightSidebarWidth + 'px' }}
-      >
-        <TemplatesSidebar 
-          templates={templates}
-          onUseTemplate={useTemplate}
-          onTemplatesChanged={fetchTemplates}
-        />
+      <div className={`${rightSidebarOpen ? 'block' : 'hidden'} md:relative absolute right-0 top-0 bottom-0 z-10 w-full md:w-auto h-full overflow-hidden bg-white`} style={{ width: rightSidebarOpen ? rightSidebarWidth : 0 }}>
+        {rightSidebarOpen && (
+          <div
+            className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-300 active:bg-blue-400"
+            onMouseDown={handleRightResizerMouseDown}
+          ></div>
+        )}
+        <div className="w-full h-full">
+          <TemplatesSidebar 
+            templates={templates}
+            onUseTemplate={useTemplate}
+            onTemplatesChanged={fetchTemplates}
+          />
+        </div>
       </div>
 
       {/* Agent Selection Modal */}
