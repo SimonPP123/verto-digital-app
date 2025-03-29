@@ -2752,7 +2752,12 @@ router.post('/analytics/ga4/callback', express.text({ type: '*/*' }), async (req
     logger.info('Received GA4 callback:', {
       contentType,
       contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown',
-      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string'
+      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string',
+      url: req.originalUrl,
+      path: req.path,
+      query: req.query,
+      method: req.method,
+      headers: req.headers
     });
 
     // Extract the conversation ID from query params
@@ -2762,18 +2767,63 @@ router.post('/analytics/ga4/callback', express.text({ type: '*/*' }), async (req
     if (contentType.includes('application/json') && typeof rawContent === 'string') {
       try {
         const jsonContent = JSON.parse(rawContent);
+        logger.info('Parsed JSON content:', {
+          hasConversationId: !!jsonContent.conversationId,
+          contentKeys: Object.keys(jsonContent),
+          bodyPreview: JSON.stringify(jsonContent).substring(0, 200)
+        });
+        
         if (!conversationId && jsonContent.conversationId) {
           conversationId = jsonContent.conversationId;
           logger.info('Extracted conversationId from JSON body:', { conversationId });
           rawContent = jsonContent; // Use the parsed JSON for later processing
+        }
+        
+        // Try to extract from nested structures that n8n might send
+        if (!conversationId && jsonContent.body && typeof jsonContent.body === 'object') {
+          if (jsonContent.body.conversationId) {
+            conversationId = jsonContent.body.conversationId;
+            logger.info('Extracted conversationId from JSON body.conversationId:', { conversationId });
+          }
+        }
+        
+        // Check if this is an n8n webhook payload with template variables
+        if (!conversationId && jsonContent.body) {
+          // Check for n8n template patterns in stringified JSON
+          const jsonString = JSON.stringify(jsonContent);
+          
+          // Try to extract conversationId from common n8n template patterns
+          const n8nTemplateMatch = jsonString.match(/conversationId['"]*\s*:\s*['"]*([a-f0-9-]+)['"]*/) ||
+                                   jsonString.match(/conversationId=([a-f0-9-]+)/) ||
+                                   jsonString.match(/[\/\?]([a-f0-9-]{36})/);
+          
+          if (n8nTemplateMatch && n8nTemplateMatch[1]) {
+            conversationId = n8nTemplateMatch[1];
+            logger.info('Extracted conversationId from n8n template pattern:', { conversationId, matchPattern: n8nTemplateMatch[0] });
+          }
         }
       } catch (parseError) {
         logger.error('Error parsing JSON content in GA4 callback:', parseError);
         // Continue with raw content
       }
     }
+    
+    // Last resort - try to find a conversationId pattern in the raw string
+    if (!conversationId && typeof rawContent === 'string') {
+      // Check if the raw content contains a UUID pattern
+      const uuidMatch = rawContent.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+      if (uuidMatch) {
+        conversationId = uuidMatch[1];
+        logger.info('Extracted conversationId from UUID pattern in raw content:', { conversationId });
+      }
+    }
 
     if (!conversationId) {
+      logger.error('No conversation ID found in GA4 callback request:', { 
+        body: typeof rawContent === 'string' ? rawContent.substring(0, 500) : 'non-string body',
+        query: req.query,
+        path: req.path
+      });
       throw new Error('No conversation ID provided in GA4 callback');
     }
 
@@ -2782,6 +2832,7 @@ router.post('/analytics/ga4/callback', express.text({ type: '*/*' }), async (req
     const conversation = await Conversation.findOne({ conversationId });
 
     if (!conversation) {
+      logger.error(`Conversation with ID ${conversationId} not found in GA4 callback`);
       throw new Error(`Conversation with ID ${conversationId} not found`);
     }
 
@@ -2803,12 +2854,24 @@ router.post('/analytics/ga4/callback', express.text({ type: '*/*' }), async (req
     } else {
       responseContent = 'Received callback with unknown content format';
     }
+    
+    logger.info('Processed GA4 response content:', {
+      conversationId,
+      contentLength: typeof responseContent === 'string' ? responseContent.length : 'not a string',
+      contentPreview: typeof responseContent === 'string' ? responseContent.substring(0, 200) : 'not a string'
+    });
 
     // Update the conversation with the response
     // Find the last message with "Processing..." content
     const processingMessageIndex = conversation.messages.findIndex(
       msg => msg.role === 'assistant' && msg.content === 'Processing your Google Analytics request...'
     );
+    
+    logger.info('GA4 processing message search result:', {
+      foundProcessingMessage: processingMessageIndex !== -1,
+      processingIndex: processingMessageIndex,
+      messagesCount: conversation.messages.length
+    });
 
     if (processingMessageIndex !== -1) {
       // Replace the processing message with the actual response
@@ -2857,11 +2920,14 @@ router.get('/analytics/ga4/status/:conversationId', isAuthenticated, async (req,
     const { conversationId } = req.params;
     
     if (!conversationId) {
+      logger.error('Missing conversationId in GA4 status check:', { params: req.params });
       return res.status(400).json({
         success: false,
         error: 'Missing conversation ID'
       });
     }
+    
+    logger.info('Checking GA4 request status:', { conversationId });
     
     // Find the conversation - look in the AssistantConversation collection
     const Conversation = mongoose.model('AssistantConversation');
@@ -2871,6 +2937,7 @@ router.get('/analytics/ga4/status/:conversationId', isAuthenticated, async (req,
     });
     
     if (!conversation) {
+      logger.error('Conversation not found in GA4 status check:', { conversationId, userId: req.user._id });
       return res.status(404).json({
         success: false,
         error: 'Conversation not found'
@@ -2881,6 +2948,12 @@ router.get('/analytics/ga4/status/:conversationId', isAuthenticated, async (req,
     const isProcessing = conversation.messages.some(
       msg => msg.role === 'assistant' && msg.content === 'Processing your Google Analytics request...'
     );
+    
+    logger.info('GA4 status check result:', { 
+      conversationId, 
+      isProcessing,
+      messagesCount: conversation.messages.length 
+    });
     
     if (isProcessing) {
       return res.json({

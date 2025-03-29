@@ -316,14 +316,30 @@ router.post('/send', isAuthenticated, async (req, res) => {
           // Use production URL for callbacks in all environments
           const forcedBaseUrl = 'https://bolt.vertodigital.com';
           const callbackUrl = `${forcedBaseUrl}/api/analytics/ga4/callback?conversationId=${conversationId}`;
+          const statusUrl = `${forcedBaseUrl}/api/analytics/ga4/status/${conversationId}`;
           
           // Add the useCallback flag to the payload
           const asyncPayload = {
             ...requestPayload,
             accessToken: ga4Token,
+            conversationId, // Add directly at root level
             useCallback: true,
             messageNumber: Math.max(1, conversation.messages.length - 1), // Fix messageNumber to be 1 for first message
-            callbackUrl
+            callbackUrl,
+            statusUrl, // Add status URL for polling
+            // Add extra fields to ensure n8n can find the conversationId
+            metadata: {
+              conversationId, // Include in metadata
+              callbackDetails: {
+                url: callbackUrl,
+                method: 'POST',
+                params: { conversationId }
+              },
+              statusDetails: {
+                url: statusUrl,
+                method: 'GET'
+              }
+            }
           };
           
           // Start a background process to send the request to n8n
@@ -342,29 +358,77 @@ router.post('/send', isAuthenticated, async (req, res) => {
                 tokenType: typeof ga4Token,
                 tokenLength: ga4Token ? ga4Token.length : 0,
                 urlLength: n8nUrl.length,
-                messageNumber: asyncPayload.messageNumber
+                messageNumber: asyncPayload.messageNumber,
+                payloadStructure: Object.keys(asyncPayload),
+                n8nUrl,
+                callbackUrl
               });
               
               // Make a direct request to the n8n webhook URL instead of using processAnalyticsQuery
-              const response = await fetch(n8nUrl, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'X-Request-Timeout': '300' // Request 300 seconds timeout
-                },
-                body: JSON.stringify(asyncPayload)
-              });
+              // Use node-fetch polyfill if necessary
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
               
-              if (!response.ok) {
-                throw new Error(`N8N responded with status: ${response.status}`);
+              try {
+                const fetchResponse = await fetch(n8nUrl, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-Request-Timeout': '300', // Request 300 seconds timeout
+                    'User-Agent': 'VertoDigital/AI-Assistant/1.0'
+                  },
+                  body: JSON.stringify(asyncPayload),
+                  signal: controller.signal
+                }).catch(fetchError => {
+                  // Detailed logging for network-level fetch errors
+                  logger.error('Network error in GA4 fetch request:', {
+                    error: fetchError.toString(),
+                    stack: fetchError.stack,
+                    code: fetchError.code,
+                    type: fetchError.type,
+                    url: n8nUrl
+                  });
+                  
+                  throw new Error(`Network error connecting to n8n: ${fetchError.message}`);
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!fetchResponse) {
+                  throw new Error('Empty response received from n8n');
+                }
+                
+                if (!fetchResponse.ok) {
+                  // Try to get the response text for better error context
+                  let errorText;
+                  try {
+                    errorText = await fetchResponse.text();
+                  } catch (textError) {
+                    errorText = 'Unable to get response text';
+                  }
+                  
+                  logger.error('Non-OK response from n8n:', {
+                    status: fetchResponse.status,
+                    statusText: fetchResponse.statusText,
+                    errorText: errorText.substring(0, 500),
+                    headers: Object.fromEntries([...fetchResponse.headers.entries()])
+                  });
+                  
+                  throw new Error(`N8N responded with status: ${fetchResponse.status} - ${fetchResponse.statusText}`);
+                }
+                
+                logger.info('Successfully sent GA4 request asynchronously with callback', {
+                  conversationId,
+                  n8nUrl,
+                  callbackUrl,
+                  statusUrl,
+                  messageNumber: asyncPayload.messageNumber,
+                  responseStatus: fetchResponse.status
+                });
+              } catch (fetchError) {
+                clearTimeout(timeoutId);
+                throw fetchError;
               }
-              
-              logger.info('Successfully sent GA4 request asynchronously with callback', {
-                conversationId,
-                n8nUrl,
-                callbackUrl,
-                messageNumber: asyncPayload.messageNumber,
-              });
             } catch (error) {
               logger.error('Background GA4 request failed:', error, {
                 conversationId
