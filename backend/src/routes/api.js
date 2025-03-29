@@ -2353,22 +2353,31 @@ router.delete('/analytics/google-analytics/:id', isAuthenticated, async (req, re
 
 // Helper function to get the appropriate callback URL for Google Analytics
 const getGACallbackUrl = (req) => {
-  // Default to env setting
-  let baseUrl = process.env.BACKEND_URL;
+  // Always use the production URL for callbacks in production
+  const forcedBaseUrl = 'https://bolt.vertodigital.com';
   
-  // If request comes from a production domain
-  if (req.headers.host && !req.headers.host.includes('localhost')) {
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-    baseUrl = `${protocol}://${req.headers.host}`;
+  // For development environments, we can use the local URL
+  if (process.env.NODE_ENV === 'development') {
+    // Default to env setting
+    let devBaseUrl = process.env.BACKEND_URL;
+    
+    // If request comes from a production domain
+    if (req.headers.host && !req.headers.host.includes('localhost')) {
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      devBaseUrl = `${protocol}://${req.headers.host}`;
+    }
+    
+    // Origin header can override for non-localhost
+    if (req.headers.origin && !req.headers.origin.includes('localhost')) {
+      devBaseUrl = req.headers.origin;
+    }
+    
+    logger.info('Using Google Analytics callback base URL for development:', devBaseUrl);
+    return `${devBaseUrl}/api/analytics/auth/callback`;
   }
   
-  // Origin header can override for non-localhost
-  if (req.headers.origin && !req.headers.origin.includes('localhost')) {
-    baseUrl = req.headers.origin;
-  }
-  
-  logger.info('Using Google Analytics callback base URL:', baseUrl);
-  return `${baseUrl}/api/analytics/auth/callback`;
+  logger.info('Using production callback URL for Google Analytics:', forcedBaseUrl);
+  return `${forcedBaseUrl}/api/analytics/auth/callback`;
 };
 
 // Get Google Analytics 4 auth status
@@ -2654,8 +2663,15 @@ router.post('/analytics/query', isAuthenticated, async (req, res) => {
       });
       
       // Generate callback URL
-      const callbackBaseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-      const callbackUrl = `${callbackBaseUrl}/api/analytics/ga4/callback?conversationId=${conversationId}`;
+      const ga4CallbackBaseUrl = req.get('x-forwarded-host') ? 
+        `https://${req.get('x-forwarded-host')}` : 
+        req.get('host') ? 
+          `https://${req.get('host')}` : 
+          process.env.BACKEND_URL || 'http://localhost:5001';
+      
+      // Use production URL for callbacks in all environments
+      const ga4ForcedBaseUrl = 'https://bolt.vertodigital.com';
+      const callbackUrl = `${ga4ForcedBaseUrl}/api/analytics/ga4/callback?conversationId=${conversationId}`;
       
       // Start background process to make the request
       (async () => {
@@ -2670,13 +2686,6 @@ router.post('/analytics/query', isAuthenticated, async (req, res) => {
           
           // Use the provided token from request if available, otherwise use the one from database
           const tokenToUse = req.body.accessToken || auth.accessToken;
-          
-          logger.info('Final token details for GA4 request:', {
-            tokenSource: req.body.accessToken ? 'from_request' : 'from_database',
-            tokenLength: tokenToUse ? tokenToUse.length : 0,
-            hasToken: !!tokenToUse,
-            callbackUrl
-          });
           
           await axios.post(n8nUrl, {
             ...req.body,
