@@ -2654,7 +2654,7 @@ router.post('/analytics/query', isAuthenticated, async (req, res) => {
       });
       
       // Generate callback URL
-      const callbackBaseUrl = process.env.BACKEND_URL || 'http://localhost:5001';
+      const callbackBaseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
       const callbackUrl = `${callbackBaseUrl}/api/analytics/ga4/callback?conversationId=${conversationId}`;
       
       // Start background process to make the request
@@ -2670,6 +2670,13 @@ router.post('/analytics/query', isAuthenticated, async (req, res) => {
           
           // Use the provided token from request if available, otherwise use the one from database
           const tokenToUse = req.body.accessToken || auth.accessToken;
+          
+          logger.info('Final token details for GA4 request:', {
+            tokenSource: req.body.accessToken ? 'from_request' : 'from_database',
+            tokenLength: tokenToUse ? tokenToUse.length : 0,
+            hasToken: !!tokenToUse,
+            callbackUrl
+          });
           
           await axios.post(n8nUrl, {
             ...req.body,

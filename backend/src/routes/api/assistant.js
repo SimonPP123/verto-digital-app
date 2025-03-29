@@ -307,7 +307,7 @@ router.post('/send', isAuthenticated, async (req, res) => {
           await conversation.save();
           
           // Generate callback URL
-          const callbackBaseUrl = process.env.BACKEND_URL || 'http://localhost:5001';
+          const callbackBaseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
           const callbackUrl = `${callbackBaseUrl}/api/analytics/ga4/callback?conversationId=${conversationId}`;
           
           // Add the useCallback flag to the payload
@@ -346,10 +346,27 @@ router.post('/send', isAuthenticated, async (req, res) => {
                   'X-Request-Timeout': '300' // Request 300 seconds timeout
                 },
                 body: JSON.stringify(asyncPayload)
+              }).catch(fetchError => {
+                // Detailed fetch error logging
+                logger.error('Fetch operation failed for GA4:', {
+                  error: fetchError.message,
+                  code: fetchError.code,
+                  type: fetchError.type,
+                  n8nUrl,
+                  stack: fetchError.stack
+                });
+                throw new Error(`Fetch failed: ${fetchError.message}`);
               });
               
               if (!response.ok) {
-                throw new Error(`N8N responded with status: ${response.status}`);
+                const errorText = await response.text().catch(() => 'Could not read response text');
+                logger.error(`N8N responded with status: ${response.status}`, {
+                  statusText: response.statusText,
+                  errorText,
+                  n8nUrl,
+                  headers: Object.fromEntries([...response.headers.entries()])
+                });
+                throw new Error(`N8N responded with status: ${response.status} - ${errorText}`);
               }
               
               logger.info('Successfully sent GA4 request asynchronously with callback', {
@@ -424,7 +441,7 @@ router.post('/send', isAuthenticated, async (req, res) => {
         await conversation.save();
         
         // Generate callback URLs
-        const callbackBaseUrl = process.env.BACKEND_URL || 'http://localhost:5001';
+        const callbackBaseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
         const callbackUrlWithQuery = `${callbackBaseUrl}/api/assistant/bigquery/callback?conversationId=${conversationId}`;
         const callbackUrlWithPath = `${callbackBaseUrl}/api/assistant/bigquery/callback/${conversationId}`;
         
@@ -455,10 +472,27 @@ router.post('/send', isAuthenticated, async (req, res) => {
                 'X-Request-Timeout': '300' // Request 300 seconds timeout
               },
               body: JSON.stringify(callbackPayload)
+            }).catch(fetchError => {
+              // Detailed fetch error logging
+              logger.error('Fetch operation failed for BigQuery:', {
+                error: fetchError.message,
+                code: fetchError.code,
+                type: fetchError.type,
+                n8nUrl,
+                stack: fetchError.stack
+              });
+              throw new Error(`Fetch failed: ${fetchError.message}`);
             });
             
             if (!response.ok) {
-              throw new Error(`N8N responded with status: ${response.status}`);
+              const errorText = await response.text().catch(() => 'Could not read response text');
+              logger.error(`N8N responded with status: ${response.status}`, {
+                statusText: response.statusText,
+                errorText,
+                n8nUrl,
+                headers: Object.fromEntries([...response.headers.entries()])
+              });
+              throw new Error(`N8N responded with status: ${response.status} - ${errorText}`);
             }
             
             logger.info('Successfully sent BigQuery request asynchronously', {
