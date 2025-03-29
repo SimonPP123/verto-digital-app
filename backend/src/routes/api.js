@@ -19,6 +19,7 @@ const GA4Report = require('../models/GA4Report');
 const GoogleAnalyticsAuth = require('../models/GoogleAnalyticsAuth');
 const crypto = require('crypto');
 const User = require('../models/User');
+const mongoose = require('mongoose');
 
 // Create uploads directory if it doesn't exist
 const uploadDir = path.join(__dirname, '../../uploads');
@@ -2639,6 +2640,56 @@ router.post('/analytics/query', isAuthenticated, async (req, res) => {
       throw new Error('N8N_GOOGLE_ANALYTICS_4 environment variable is not set');
     }
     
+    // Check if this is using the async callback pattern
+    const { conversationId, useCallback } = req.body;
+    
+    // If using callback pattern, send request to n8n and return immediately
+    if (useCallback && conversationId) {
+      logger.info('Processing GA4 request asynchronously', {
+        userId,
+        conversationId,
+        useCallback: true
+      });
+      
+      // Generate callback URL
+      const callbackBaseUrl = process.env.BACKEND_URL || 'http://localhost:5001';
+      const callbackUrl = `${callbackBaseUrl}/api/analytics/ga4/callback?conversationId=${conversationId}`;
+      
+      // Start background process to make the request
+      (async () => {
+        try {
+          await axios.post(n8nUrl, {
+            ...req.body,
+            accessToken: auth.accessToken,
+            userId: userId.toString(),
+            callbackUrl
+          }, {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Request-Timeout': '300' // Request 300 seconds if n8n supports it
+            },
+            timeout: 300000 // 5 minutes
+          });
+          
+          logger.info('Successfully sent GA4 request to n8n with callback', {
+            conversationId,
+            targetUrl: n8nUrl
+          });
+        } catch (error) {
+          logger.error('Background GA4 request to n8n failed:', error, {
+            conversationId
+          });
+        }
+      })();
+      
+      return res.json({
+        success: true,
+        message: 'GA4 request processing started',
+        status: 'processing'
+      });
+    }
+    
+    // For synchronous requests (legacy support)
     logger.info('Forwarding GA4 request to n8n:', {
       userId,
       url: n8nUrl,
@@ -2661,5 +2712,248 @@ router.post('/analytics/query', isAuthenticated, async (req, res) => {
     });
   }
 });
+
+// Add a callback endpoint for GA4 responses from n8n
+router.post('/analytics/ga4/callback', express.text({ type: '*/*' }), async (req, res) => {
+  try {
+    // Get raw content from request body
+    let rawContent = req.body;
+    let contentType = req.headers['content-type'] || 'text/plain';
+    
+    logger.info('Received GA4 callback:', {
+      contentType,
+      contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown',
+      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string'
+    });
+
+    // Extract the conversation ID from query params
+    let conversationId = req.query.conversationId;
+    
+    // If it's JSON content, try to parse and get conversationId from body
+    if (contentType.includes('application/json') && typeof rawContent === 'string') {
+      try {
+        const jsonContent = JSON.parse(rawContent);
+        if (!conversationId && jsonContent.conversationId) {
+          conversationId = jsonContent.conversationId;
+          logger.info('Extracted conversationId from JSON body:', { conversationId });
+          rawContent = jsonContent; // Use the parsed JSON for later processing
+        }
+      } catch (parseError) {
+        logger.error('Error parsing JSON content in GA4 callback:', parseError);
+        // Continue with raw content
+      }
+    }
+
+    if (!conversationId) {
+      throw new Error('No conversation ID provided in GA4 callback');
+    }
+
+    // Find the conversation - look in the AssistantConversation collection
+    const Conversation = mongoose.model('AssistantConversation');
+    const conversation = await Conversation.findOne({ conversationId });
+
+    if (!conversation) {
+      throw new Error(`Conversation with ID ${conversationId} not found`);
+    }
+
+    // Process the content and extract the actual response
+    let responseContent = '';
+    
+    if (typeof rawContent === 'object' && rawContent !== null) {
+      // It's already parsed JSON
+      responseContent = extractResponseContentFromGa4(rawContent);
+    } else if (typeof rawContent === 'string') {
+      // Try to parse as JSON first
+      try {
+        const parsedContent = JSON.parse(rawContent);
+        responseContent = extractResponseContentFromGa4(parsedContent);
+      } catch (parseError) {
+        // If parsing fails, use the raw content
+        responseContent = rawContent;
+      }
+    } else {
+      responseContent = 'Received callback with unknown content format';
+    }
+
+    // Update the conversation with the response
+    // Find the last message with "Processing..." content
+    const processingMessageIndex = conversation.messages.findIndex(
+      msg => msg.role === 'assistant' && msg.content === 'Processing your Google Analytics request...'
+    );
+
+    if (processingMessageIndex !== -1) {
+      // Replace the processing message with the actual response
+      conversation.messages[processingMessageIndex] = {
+        role: 'assistant',
+        content: responseContent,
+        timestamp: new Date()
+      };
+    } else {
+      // If no processing message found, add a new assistant message
+      conversation.messages.push({
+        role: 'assistant',
+        content: responseContent,
+        timestamp: new Date()
+      });
+    }
+
+    conversation.updatedAt = new Date();
+    await conversation.save();
+
+    logger.info('Successfully updated conversation with GA4 callback response', {
+      conversationId,
+      responseLength: typeof responseContent === 'string' ? responseContent.length : 'not a string'
+    });
+
+    // Return success to n8n
+    res.json({
+      success: true,
+      message: 'GA4 response processed successfully',
+      conversationId
+    });
+
+  } catch (error) {
+    logger.error('Error handling GA4 callback:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to handle GA4 callback',
+      error: error.message
+    });
+  }
+});
+
+// Add a status endpoint for GA4 polling
+router.get('/analytics/ga4/status/:conversationId', isAuthenticated, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    
+    if (!conversationId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing conversation ID'
+      });
+    }
+    
+    // Find the conversation - look in the AssistantConversation collection
+    const Conversation = mongoose.model('AssistantConversation');
+    const conversation = await Conversation.findOne({
+      conversationId,
+      user: req.user._id
+    });
+    
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        error: 'Conversation not found'
+      });
+    }
+    
+    // Check if there's a processing message
+    const isProcessing = conversation.messages.some(
+      msg => msg.role === 'assistant' && msg.content === 'Processing your Google Analytics request...'
+    );
+    
+    if (isProcessing) {
+      return res.json({
+        success: true,
+        status: 'processing',
+        message: 'Your Google Analytics request is still being processed.'
+      });
+    } else {
+      // Get the last assistant message as the response
+      const lastAssistantMessage = [...conversation.messages]
+        .reverse()
+        .find(msg => msg.role === 'assistant');
+      
+      return res.json({
+        success: true,
+        status: 'completed',
+        message: lastAssistantMessage ? lastAssistantMessage.content : 'No response available.'
+      });
+    }
+  } catch (error) {
+    logger.error('Error checking GA4 status:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to check GA4 status',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * Helper function to extract response content from GA4 responses
+ */
+function extractResponseContentFromGa4(responseData) {
+  // Handle different response formats
+  try {
+    if (responseData === null || responseData === undefined) {
+      return 'No data received from Google Analytics 4';
+    }
+    
+    // If it's already a string, return it
+    if (typeof responseData === 'string') {
+      return responseData;
+    }
+    
+    // If it's an array, check if items have output or response field
+    if (Array.isArray(responseData)) {
+      // If there's only one item and it has an output field, return that
+      if (responseData.length === 1 && responseData[0] && typeof responseData[0].output === 'string') {
+        return responseData[0].output;
+      }
+      
+      // Otherwise try to process each item
+      const results = responseData
+        .filter(item => item !== null && item !== undefined)
+        .map(item => {
+          if (typeof item === 'string') return item;
+          if (typeof item === 'object') {
+            // Check for common response fields
+            if (item.output) return item.output;
+            if (item.response) return item.response;
+            if (item.content) return item.content;
+            if (item.text) return item.text;
+            if (item.message) return item.message;
+            
+            // If no recognized field, stringify the whole object
+            try {
+              return JSON.stringify(item);
+            } catch (e) {
+              return 'Unparseable response item';
+            }
+          }
+          return String(item);
+        })
+        .filter(item => !!item); // Remove empty strings
+        
+      if (results.length > 0) {
+        return results.join('\n\n');
+      }
+    }
+    
+    // If it's an object, check for common fields
+    if (typeof responseData === 'object') {
+      if (responseData.output) return responseData.output;
+      if (responseData.response) return responseData.response;
+      if (responseData.content) return responseData.content;
+      if (responseData.text) return responseData.text;
+      if (responseData.message) return responseData.message;
+      
+      // If no recognized field, stringify the whole object
+      try {
+        return JSON.stringify(responseData, null, 2);
+      } catch (e) {
+        return 'Unparseable response object';
+      }
+    }
+    
+    // Default - convert to string
+    return String(responseData);
+  } catch (error) {
+    logger.error('Error extracting GA4 response content:', error);
+    return 'Error processing response from Google Analytics 4';
+  }
+}
 
 module.exports = router; 

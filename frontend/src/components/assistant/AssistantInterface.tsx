@@ -73,6 +73,8 @@ export default function AssistantInterface() {
   const [pendingAgent, setPendingAgent] = useState<Agent | null>(null);
   // Add state to track if we're polling for BigQuery responses
   const [isBigQueryPolling, setIsBigQueryPolling] = useState(false);
+  // Add state to track if we're polling for GA4 responses
+  const [isGA4Polling, setIsGA4Polling] = useState(false);
 
   useEffect(() => {
     // Fetch conversation sessions on component mount
@@ -82,32 +84,48 @@ export default function AssistantInterface() {
     fetchTemplates();
   }, []);
 
-  // Add polling for BigQuery requests
+  // Add polling for BigQuery and GA4 requests
   useEffect(() => {
-    // Only poll if we have a current conversation and it's a BigQuery agent
-    if (!currentConversation || 
-        !currentConversation.agent || 
-        currentConversation.agent.name !== 'BigQuery Agent' ||
-        !isBigQueryPolling) {
+    // Only poll if we have a current conversation
+    if (!currentConversation) {
       return;
     }
 
-    // Check if there's a processing message in the conversation
-    const hasProcessingMessage = currentConversation.messages.some(
+    // Check if we need to poll for BigQuery
+    const isBigQueryAgent = currentConversation.agent?.name === 'BigQuery Agent';
+    const hasBigQueryProcessingMessage = currentConversation.messages.some(
       msg => msg.role === 'assistant' && msg.content === 'Processing your BigQuery request...'
     );
 
-    if (!hasProcessingMessage) {
-      // Stop polling if there's no processing message
-      setIsBigQueryPolling(false);
+    // Check if we need to poll for GA4
+    const isGA4Agent = currentConversation.agent?.name === 'Google Analytics 4';
+    const hasGA4ProcessingMessage = currentConversation.messages.some(
+      msg => msg.role === 'assistant' && msg.content === 'Processing your Google Analytics request...'
+    );
+
+    // Determine if we need to poll
+    const shouldPollBigQuery = isBigQueryAgent && hasBigQueryProcessingMessage && isBigQueryPolling;
+    const shouldPollGA4 = isGA4Agent && hasGA4ProcessingMessage && isGA4Polling;
+    
+    // If no polling needed, return early
+    if (!shouldPollBigQuery && !shouldPollGA4) {
       return;
     }
 
     // Set up polling interval
     const intervalId = setInterval(async () => {
       try {
-        // Call the status endpoint
-        const response = await fetch(`/api/assistant/bigquery/status/${currentConversation.conversationId}`);
+        let response;
+        
+        // Poll the appropriate endpoint
+        if (shouldPollBigQuery) {
+          response = await fetch(`/api/assistant/bigquery/status/${currentConversation.conversationId}`);
+        } else if (shouldPollGA4) {
+          response = await fetch(`/api/analytics/ga4/status/${currentConversation.conversationId}`);
+        } else {
+          // Shouldn't get here, but just in case
+          return; 
+        }
         
         if (!response.ok) {
           throw new Error(`Failed to fetch status: ${response.status}`);
@@ -118,18 +136,24 @@ export default function AssistantInterface() {
         if (data.status === 'completed') {
           // If processing is complete, fetch the updated conversation
           await selectConversation(currentConversation.conversationId);
+          
           // Stop polling
-          setIsBigQueryPolling(false);
+          if (shouldPollBigQuery) {
+            setIsBigQueryPolling(false);
+          }
+          if (shouldPollGA4) {
+            setIsGA4Polling(false);
+          }
         }
       } catch (error) {
-        console.error('Error polling BigQuery status:', error);
+        console.error('Error polling status:', error);
         // Log error but continue polling
       }
     }, 3000); // Poll every 3 seconds
 
     // Cleanup interval on unmount or when polling stops
     return () => clearInterval(intervalId);
-  }, [currentConversation, isBigQueryPolling]);
+  }, [currentConversation, isBigQueryPolling, isGA4Polling]);
 
   const fetchConversationSessions = async () => {
     try {
@@ -498,6 +522,17 @@ export default function AssistantInterface() {
                 msg.content === 'Processing your BigQuery request...'
             )) {
           setIsBigQueryPolling(true);
+        }
+        
+        // Start polling if this is a GA4 agent that's processing
+        const isGA4Agent = data.updatedConversation.agent?.name === 'Google Analytics 4';
+        if (isGA4Agent && 
+            data.updatedConversation.messages.some(
+              (msg: MessageType) => 
+                msg.role === 'assistant' && 
+                msg.content === 'Processing your Google Analytics request...'
+            )) {
+          setIsGA4Polling(true);
         }
       }
 

@@ -254,7 +254,8 @@ router.post('/send', isAuthenticated, async (req, res) => {
       message,
       userId: req.user._id,
       userName: req.user.name,
-      userEmail: req.user.email
+      userEmail: req.user.email,
+      messageNumber: conversation.messages.length // Add messageNumber
     };
     
     // Add GA4 account ID if available
@@ -288,11 +289,103 @@ router.post('/send', isAuthenticated, async (req, res) => {
           trimmedAccountId: accountId ? accountId.trim() : null
         });
         
-        // Use direct function call instead of HTTP request
-        responseData = await processAnalyticsQuery({
-          ...requestPayload,
-          accessToken: ga4Token
-        });
+        // Check if we should use the asynchronous pattern
+        const useAsyncPattern = true; // Flag to enable async for GA4 agent
+        
+        if (useAsyncPattern) {
+          logger.info('Processing Google Analytics 4 request asynchronously', {
+            conversationId
+          });
+          
+          // Create a placeholder response message
+          const processingMessage = {
+            role: 'assistant',
+            content: 'Processing your Google Analytics request...',
+            timestamp: new Date()
+          };
+          
+          // Add the processing message to the conversation
+          conversation.messages.push(processingMessage);
+          conversation.updatedAt = new Date();
+          await conversation.save();
+          
+          // Add the useCallback flag to the payload
+          const asyncPayload = {
+            ...requestPayload,
+            accessToken: ga4Token,
+            useCallback: true,
+            messageNumber: conversation.messages.length // Use the current message count as messageNumber
+          };
+          
+          // Ensure webhook URL is absolute
+          let fullWebhookUrl = targetWebhookUrl;
+          if (targetWebhookUrl.startsWith('/')) {
+            fullWebhookUrl = `${process.env.BACKEND_URL}${targetWebhookUrl}`;
+            logger.info(`Converted relative webhook URL to absolute: ${fullWebhookUrl}`);
+          }
+          
+          // Start a background process to send the request
+          (async () => {
+            try {
+              await fetch(fullWebhookUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(asyncPayload)
+              });
+              logger.info('Successfully sent GA4 request asynchronously', {
+                conversationId,
+                targetWebhookUrl: fullWebhookUrl
+              });
+            } catch (error) {
+              logger.error('Background GA4 request failed:', error, {
+                conversationId
+              });
+              
+              // Update the conversation with error
+              try {
+                const errorMessage = {
+                  role: 'assistant',
+                  content: `Error sending request to Google Analytics: ${error.message}`,
+                  timestamp: new Date()
+                };
+                
+                // Find and replace the processing message
+                const updatedConversation = await AssistantConversation.findOne({ conversationId });
+                if (updatedConversation) {
+                  const processingIndex = updatedConversation.messages.findIndex(
+                    msg => msg.role === 'assistant' && msg.content === 'Processing your Google Analytics request...'
+                  );
+                  
+                  if (processingIndex !== -1) {
+                    updatedConversation.messages[processingIndex] = errorMessage;
+                  } else {
+                    updatedConversation.messages.push(errorMessage);
+                  }
+                  
+                  updatedConversation.updatedAt = new Date();
+                  await updatedConversation.save();
+                }
+              } catch (dbError) {
+                logger.error('Failed to update conversation with error message:', dbError);
+              }
+            }
+          })();
+          
+          // Return the conversation with the processing message
+          return res.json({
+            success: true,
+            response: processingMessage.content,
+            updatedConversation: conversation
+          });
+        } else {
+          // Legacy synchronous call (use only for compatibility)
+          responseData = await processAnalyticsQuery({
+            ...requestPayload,
+            accessToken: ga4Token
+          });
+        }
       } 
       // Add special handling for BigQuery agent - use asynchronous callback pattern
       else if (conversation.agent?.name === 'BigQuery Agent') {
@@ -322,7 +415,8 @@ router.post('/send', isAuthenticated, async (req, res) => {
           ...requestPayload,
           callbackUrl: callbackUrlWithPath,
           callbackUrlWithQuery,
-          useCallback: true
+          useCallback: true,
+          messageNumber: conversation.messages.length // Add message number parameter
         };
         
         // Ensure webhook URL is absolute
@@ -360,20 +454,20 @@ router.post('/send', isAuthenticated, async (req, res) => {
               };
               
               // Find and replace the processing message
-              const conversation = await AssistantConversation.findOne({ conversationId });
-              if (conversation) {
-                const processingIndex = conversation.messages.findIndex(
+              const updatedConversation = await AssistantConversation.findOne({ conversationId });
+              if (updatedConversation) {
+                const processingIndex = updatedConversation.messages.findIndex(
                   msg => msg.role === 'assistant' && msg.content === 'Processing your BigQuery request...'
                 );
                 
                 if (processingIndex !== -1) {
-                  conversation.messages[processingIndex] = errorMessage;
+                  updatedConversation.messages[processingIndex] = errorMessage;
                 } else {
-                  conversation.messages.push(errorMessage);
+                  updatedConversation.messages.push(errorMessage);
                 }
                 
-                conversation.updatedAt = new Date();
-                await conversation.save();
+                updatedConversation.updatedAt = new Date();
+                await updatedConversation.save();
               }
             } catch (dbError) {
               logger.error('Failed to update conversation with error message:', dbError);

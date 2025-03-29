@@ -13,6 +13,7 @@ async function processAnalyticsQuery(requestData) {
     // Extract the userId from the request data
     const userId = requestData.userId;
     const ga4AccountId = requestData.ga4AccountId;
+    const callbackUrl = requestData.callbackUrl; // Extract callback URL if present
     
     if (!userId) {
       throw new Error('User ID is required for analytics queries');
@@ -77,6 +78,7 @@ async function processAnalyticsQuery(requestData) {
       hasAccessToken: !!auth.accessToken,
       hasAccountId: !!processedAccountId,
       accountId: processedAccountId,
+      hasCallbackUrl: !!callbackUrl,
       message: requestData.message ? requestData.message.substring(0, 50) : null
     });
     
@@ -85,8 +87,17 @@ async function processAnalyticsQuery(requestData) {
       ...requestData,
       accessToken: auth.accessToken,
       userId: userId.toString(),
-      ga4AccountId: processedAccountId
+      ga4AccountId: processedAccountId,
+      messageNumber: requestData.messageNumber || 1 // Add messageNumber parameter with default value of 1
     };
+    
+    // If we have a callback URL, add it to the payload
+    if (callbackUrl) {
+      n8nPayload.callbackUrl = callbackUrl;
+      logger.info('Including callback URL in n8n request:', {
+        callbackUrl
+      });
+    }
     
     // Log timeout settings
     logger.info('Making request to n8n with timeout settings:', {
