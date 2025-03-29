@@ -306,40 +306,24 @@ router.post('/send', isAuthenticated, async (req, res) => {
           conversation.updatedAt = new Date();
           await conversation.save();
           
-          // Generate callback URL
-          const callbackBaseUrl = req.get('x-forwarded-host') ? 
-            `https://${req.get('x-forwarded-host')}` : 
-            req.get('host') ? 
-              `https://${req.get('host')}` : 
-              process.env.BACKEND_URL || 'http://localhost:5001';
-          
           // Use production URL for callbacks in all environments
           const forcedBaseUrl = 'https://bolt.vertodigital.com';
           const callbackUrl = `${forcedBaseUrl}/api/analytics/ga4/callback?conversationId=${conversationId}`;
+          const callbackUrlWithPath = `${forcedBaseUrl}/api/analytics/ga4/callback/${conversationId}`;
           const statusUrl = `${forcedBaseUrl}/api/analytics/ga4/status/${conversationId}`;
           
-          // Add the useCallback flag to the payload
+          // Add the useCallback flag to the payload - simplify structure for n8n
           const asyncPayload = {
-            ...requestPayload,
+            message: requestPayload.message,
+            conversationId,
+            userId: requestPayload.userId,
             accessToken: ga4Token,
-            conversationId, // Add directly at root level
+            ga4AccountId: accountId || '',
+            history: requestPayload.history,
             useCallback: true,
-            messageNumber: Math.max(1, conversation.messages.length - 1), // Fix messageNumber to be 1 for first message
             callbackUrl,
-            statusUrl, // Add status URL for polling
-            // Add extra fields to ensure n8n can find the conversationId
-            metadata: {
-              conversationId, // Include in metadata
-              callbackDetails: {
-                url: callbackUrl,
-                method: 'POST',
-                params: { conversationId }
-              },
-              statusDetails: {
-                url: statusUrl,
-                method: 'GET'
-              }
-            }
+            callbackUrlWithPath, // Add path-based URL as an alternative
+            messageNumber: Math.max(1, conversation.messages.length - 1) // Fix messageNumber to be 1 for first message
           };
           
           // Start a background process to send the request to n8n
@@ -364,44 +348,45 @@ router.post('/send', isAuthenticated, async (req, res) => {
                 callbackUrl
               });
               
-              // Make a direct request to the n8n webhook URL instead of using processAnalyticsQuery
-              // Simplified fetch implementation similar to the working BigQuery agent
-              const response = await fetch(n8nUrl, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'X-Request-Timeout': '300' // Request 300 seconds timeout
-                },
-                body: JSON.stringify(asyncPayload)
-              });
-              
-              if (!response.ok) {
-                // Log error details for troubleshooting
-                let errorText = '';
-                try {
-                  errorText = await response.text();
-                } catch (e) {
-                  errorText = 'Unable to extract error text';
-                }
-                
-                logger.error('N8N GA4 webhook responded with error:', {
-                  status: response.status,
-                  statusText: response.statusText,
-                  headers: Object.fromEntries([...response.headers.entries()]),
-                  errorText: errorText.substring(0, 500)
+              // Use axios instead of fetch for better Node.js compatibility
+              try {
+                // Set a longer timeout for GA4 requests
+                const axiosResponse = await axios.post(n8nUrl, asyncPayload, {
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-Request-Timeout': '300', // Request 300 seconds timeout
+                    'User-Agent': 'VertoDigital/AI-Assistant/1.0'
+                  },
+                  timeout: 60000 // 60 second connection timeout
                 });
                 
-                throw new Error(`N8N responded with status: ${response.status}`);
+                logger.info('Successfully sent GA4 request asynchronously with callback', {
+                  conversationId,
+                  n8nUrl,
+                  callbackUrl,
+                  callbackUrlWithPath,
+                  statusUrl,
+                  messageNumber: asyncPayload.messageNumber,
+                  responseStatus: axiosResponse.status
+                });
+              } catch (axiosError) {
+                // Detailed logging for axios errors
+                logger.error('Error in GA4 axios request to n8n:', {
+                  message: axiosError.message,
+                  code: axiosError.code,
+                  isTimeout: axiosError.code === 'ECONNABORTED',
+                  status: axiosError.response?.status,
+                  statusText: axiosError.response?.statusText,
+                  data: axiosError.response?.data ? 
+                    (typeof axiosError.response.data === 'string' ? 
+                      axiosError.response.data.substring(0, 500) : 
+                      JSON.stringify(axiosError.response.data).substring(0, 500)) : 
+                    'No response data',
+                  url: n8nUrl
+                });
+                
+                throw new Error(`Error connecting to n8n: ${axiosError.message}`);
               }
-              
-              logger.info('Successfully sent GA4 request asynchronously with callback', {
-                conversationId,
-                n8nUrl,
-                callbackUrl,
-                statusUrl,
-                messageNumber: asyncPayload.messageNumber,
-                responseStatus: response.status
-              });
             } catch (error) {
               logger.error('Background GA4 request failed:', error, {
                 conversationId
@@ -409,12 +394,25 @@ router.post('/send', isAuthenticated, async (req, res) => {
               
               // Update the conversation with error
               try {
-                // Create a more detailed error message with context
-                const errorMessage = {
+                // Format the error message to be more user-friendly
+                let errorMessage = {
                   role: 'assistant',
-                  content: `Error processing your Google Analytics request: ${error.message}. Please check your GA4 account ID and try again.`,
+                  content: 'Error sending request to Google Analytics. ',
                   timestamp: new Date()
                 };
+                
+                // Add more helpful details based on the error
+                if (error.message.includes('ECONNREFUSED') || error.message.includes('ETIMEDOUT')) {
+                  errorMessage.content += 'Could not connect to the analytics service. Please try again later.';
+                } else if (error.message.includes('status: 401') || error.message.includes('status: 403')) {
+                  errorMessage.content += 'Authentication error. Please re-authenticate with Google Analytics.';
+                } else if (error.message.includes('status: 404')) {
+                  errorMessage.content += 'The analytics service endpoint was not found. Please contact support.';
+                } else if (error.message.includes('status: 500')) {
+                  errorMessage.content += 'The analytics service encountered an internal error. Please try again later.';
+                } else {
+                  errorMessage.content += `Error details: ${error.message}`;
+                }
                 
                 // Find and replace the processing message
                 const updatedConversation = await AssistantConversation.findOne({ conversationId });
@@ -426,7 +424,7 @@ router.post('/send', isAuthenticated, async (req, res) => {
                   logger.info('Updating conversation with error message:', {
                     conversationId,
                     foundProcessingMessage: processingIndex !== -1,
-                    messagesCount: updatedConversation.messages.length
+                    errorMessage: errorMessage.content
                   });
                   
                   if (processingIndex !== -1) {
@@ -438,17 +436,12 @@ router.post('/send', isAuthenticated, async (req, res) => {
                   updatedConversation.updatedAt = new Date();
                   await updatedConversation.save();
                   
-                  logger.info('Successfully updated conversation with error message');
-                } else {
-                  logger.error('Could not find conversation to update with error message:', {
+                  logger.info('Successfully updated conversation with error message', {
                     conversationId
                   });
                 }
               } catch (dbError) {
-                logger.error('Failed to update conversation with error message:', dbError, {
-                  originalError: error.message,
-                  conversationId
-                });
+                logger.error('Failed to update conversation with error message:', dbError);
               }
             }
           })();
