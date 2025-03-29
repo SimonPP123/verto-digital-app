@@ -293,7 +293,102 @@ router.post('/send', isAuthenticated, async (req, res) => {
           ...requestPayload,
           accessToken: ga4Token
         });
-      } else {
+      } 
+      // Add special handling for BigQuery agent - use asynchronous callback pattern
+      else if (conversation.agent?.name === 'BigQuery Agent') {
+        logger.info('Processing BigQuery request asynchronously', {
+          conversationId
+        });
+        
+        // Create a placeholder response message
+        const processingMessage = {
+          role: 'assistant',
+          content: 'Processing your BigQuery request...',
+          timestamp: new Date()
+        };
+        
+        // Add the processing message to the conversation
+        conversation.messages.push(processingMessage);
+        conversation.updatedAt = new Date();
+        await conversation.save();
+        
+        // Generate callback URLs
+        const callbackBaseUrl = process.env.BACKEND_URL || 'http://localhost:5001';
+        const callbackUrlWithQuery = `${callbackBaseUrl}/api/assistant/bigquery/callback?conversationId=${conversationId}`;
+        const callbackUrlWithPath = `${callbackBaseUrl}/api/assistant/bigquery/callback/${conversationId}`;
+        
+        // Add callback URLs to the payload
+        const callbackPayload = {
+          ...requestPayload,
+          callbackUrl: callbackUrlWithPath,
+          callbackUrlWithQuery,
+          useCallback: true
+        };
+        
+        // Ensure webhook URL is absolute
+        if (targetWebhookUrl.startsWith('/')) {
+          targetWebhookUrl = `${process.env.BACKEND_URL}${targetWebhookUrl}`;
+          logger.info(`Converted relative webhook URL to absolute: ${targetWebhookUrl}`);
+        }
+        
+        // Start a background process to send the request to n8n
+        // We don't await this to avoid holding up the response to the client
+        (async () => {
+          try {
+            await fetch(targetWebhookUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(callbackPayload)
+            });
+            logger.info('Successfully sent BigQuery request to n8n with callback', {
+              conversationId,
+              targetWebhookUrl
+            });
+          } catch (error) {
+            logger.error('Background BigQuery request to n8n failed:', error, {
+              conversationId
+            });
+            
+            // Update the conversation with error
+            try {
+              const errorMessage = {
+                role: 'assistant',
+                content: `Error sending request to BigQuery: ${error.message}`,
+                timestamp: new Date()
+              };
+              
+              // Find and replace the processing message
+              const conversation = await AssistantConversation.findOne({ conversationId });
+              if (conversation) {
+                const processingIndex = conversation.messages.findIndex(
+                  msg => msg.role === 'assistant' && msg.content === 'Processing your BigQuery request...'
+                );
+                
+                if (processingIndex !== -1) {
+                  conversation.messages[processingIndex] = errorMessage;
+                } else {
+                  conversation.messages.push(errorMessage);
+                }
+                
+                conversation.updatedAt = new Date();
+                await conversation.save();
+              }
+            } catch (dbError) {
+              logger.error('Failed to update conversation with error message:', dbError);
+            }
+          }
+        })();
+        
+        // Return the conversation with the processing message
+        return res.json({
+          success: true,
+          response: processingMessage.content,
+          updatedConversation: conversation
+        });
+      }
+      else {
         // For all other cases, continue with normal webhook request
         
         // If this is a Google Analytics 4 agent and we have a token, include it
@@ -554,6 +649,179 @@ function extractResponseContent(responseData) {
     return 'Error processing response from webhook';
   }
 }
+
+// Add a new callback endpoint for BigQuery agent
+router.post('/bigquery/callback', express.text({ type: '*/*' }), async (req, res) => {
+  try {
+    // Get raw content from request body
+    let rawContent = req.body;
+    let contentType = req.headers['content-type'] || 'text/plain';
+    
+    logger.info('Received BigQuery callback:', {
+      contentType,
+      contentLength: typeof rawContent === 'string' ? rawContent.length : 'unknown',
+      contentPreview: typeof rawContent === 'string' ? rawContent.substring(0, 200) + '...' : 'not a string'
+    });
+
+    // Extract the conversation ID from query params or body
+    let conversationId = req.query.conversationId;
+    
+    // If it's JSON content, try to parse and get conversationId from body
+    if (contentType.includes('application/json') && typeof rawContent === 'string') {
+      try {
+        const jsonContent = JSON.parse(rawContent);
+        if (!conversationId && jsonContent.conversationId) {
+          conversationId = jsonContent.conversationId;
+          logger.info('Extracted conversationId from JSON body:', { conversationId });
+          rawContent = jsonContent; // Use the parsed JSON for later processing
+        }
+      } catch (parseError) {
+        logger.error('Error parsing JSON content in callback:', parseError);
+        // Continue with raw content
+      }
+    }
+    
+    // If no conversationId in query params or JSON body, check URL path
+    if (!conversationId && req.path.includes('/callback/')) {
+      const pathParts = req.path.split('/');
+      conversationId = pathParts[pathParts.length - 1];
+      logger.info('Using conversationId from URL path:', { conversationId });
+    }
+
+    if (!conversationId) {
+      throw new Error('No conversation ID provided in callback');
+    }
+
+    // Find the conversation
+    const conversation = await AssistantConversation.findOne({ conversationId });
+
+    if (!conversation) {
+      throw new Error(`Conversation with ID ${conversationId} not found`);
+    }
+
+    // Process the content and extract the actual response
+    let responseContent = '';
+    
+    if (typeof rawContent === 'object' && rawContent !== null) {
+      // It's already parsed JSON
+      responseContent = extractResponseContent(rawContent);
+    } else if (typeof rawContent === 'string') {
+      // Try to parse as JSON first
+      try {
+        const parsedContent = JSON.parse(rawContent);
+        responseContent = extractResponseContent(parsedContent);
+      } catch (parseError) {
+        // If parsing fails, use the raw content
+        responseContent = rawContent;
+      }
+    } else {
+      responseContent = 'Received callback with unknown content format';
+    }
+
+    // Update the conversation with the response
+    // Find the last message with "Processing..." content
+    const processingMessageIndex = conversation.messages.findIndex(
+      msg => msg.role === 'assistant' && msg.content === 'Processing your BigQuery request...'
+    );
+
+    if (processingMessageIndex !== -1) {
+      // Replace the processing message with the actual response
+      conversation.messages[processingMessageIndex] = {
+        role: 'assistant',
+        content: responseContent,
+        timestamp: new Date()
+      };
+    } else {
+      // If no processing message found, add a new assistant message
+      conversation.messages.push({
+        role: 'assistant',
+        content: responseContent,
+        timestamp: new Date()
+      });
+    }
+
+    conversation.updatedAt = new Date();
+    await conversation.save();
+
+    logger.info('Successfully updated conversation with BigQuery callback response', {
+      conversationId,
+      responseLength: typeof responseContent === 'string' ? responseContent.length : 'not a string'
+    });
+
+    // Return success to n8n
+    res.json({
+      success: true,
+      message: 'BigQuery response processed successfully',
+      conversationId
+    });
+
+  } catch (error) {
+    logger.error('Error handling BigQuery callback:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to handle BigQuery callback',
+      error: error.message
+    });
+  }
+});
+
+// Add endpoint to check BigQuery response status
+router.get('/bigquery/status/:conversationId', isAuthenticated, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    
+    if (!conversationId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing conversation ID'
+      });
+    }
+    
+    // Find the conversation
+    const conversation = await AssistantConversation.findOne({
+      conversationId,
+      user: req.user._id
+    });
+    
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        error: 'Conversation not found'
+      });
+    }
+    
+    // Check if there's a processing message
+    const isProcessing = conversation.messages.some(
+      msg => msg.role === 'assistant' && msg.content === 'Processing your BigQuery request...'
+    );
+    
+    if (isProcessing) {
+      return res.json({
+        success: true,
+        status: 'processing',
+        message: 'Your BigQuery request is still being processed.'
+      });
+    } else {
+      // Get the last assistant message as the response
+      const lastAssistantMessage = [...conversation.messages]
+        .reverse()
+        .find(msg => msg.role === 'assistant');
+      
+      return res.json({
+        success: true,
+        status: 'completed',
+        message: lastAssistantMessage ? lastAssistantMessage.content : 'No response available.'
+      });
+    }
+  } catch (error) {
+    logger.error('Error checking BigQuery status:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to check BigQuery status',
+      message: error.message
+    });
+  }
+});
 
 // Rename a conversation session
 router.patch('/conversations/:conversationId/rename', isAuthenticated, async (req, res) => {

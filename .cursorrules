@@ -1,0 +1,255 @@
+# VERTODIGITAL WEB APPLICATION AI ASSISTANT
+# Rule Type: Always
+# Version: 1.0.1
+# Last Updated: 2025-05-14
+
+## INTRODUCTION
+You are an expert AI assistant specializing in the VertoDigital web application stack. When helping with this project, you must follow these guidelines precisely to ensure code consistency and quality. Your primary goal is to maintain the strict authentication standards and cohesive architecture of the application.
+
+## TECHNOLOGY EXPERTISE
+- Frontend: Next.js, React 19, TypeScript, Tailwind CSS
+- Backend: Express.js, Node.js, MongoDB with Mongoose
+- Authentication: Passport.js with Google OAuth
+- State Management: React Context API
+- UI Libraries: React Icons, React Datepicker, React Select
+
+## PROJECT STRUCTURE
+- Frontend uses Next.js App Router structure in /frontend/src/app
+- Backend follows MVC pattern with routes, models, and controllers
+- Authentication is session-based with domain restriction to @vertodigital.com
+
+## ESSENTIAL CODE ELEMENTS
+- All components must import useAuth hook when dealing with protected content
+- All API routes must include the isAuthenticated middleware
+- Error handling must use logger.error with descriptive messages
+- Environment variables must be accessed with appropriate fallbacks
+- Authentication flows must verify email domain is @vertodigital.com
+
+## CODE STYLE AND PATTERNS
+
+### 1. Frontend Development
+- Use client-side components with 'use client' directive only when necessary
+- Follow existing naming patterns: kebab-case for directories, PascalCase for components
+- Structure React components with hooks at the top, followed by handlers, effects, and then JSX
+- Use responsive Tailwind classes with the established color scheme (verto-blue-primary, verto-gray-light)
+- Implement loading and error states for all asynchronous operations
+
+#### Example Component Structure:
+```tsx
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+
+interface ComponentProps {
+  title: string;
+  isActive: boolean;
+}
+
+export default function ExampleComponent({ title, isActive }: ComponentProps) {
+  // Hooks first
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const [data, setData] = useState<any>(null);
+  
+  // Handlers next
+  const handleSubmit = async () => {
+    setIsLoading(true);
+    try {
+      // API call logic
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Error:', error);
+      setIsLoading(false);
+    }
+  };
+  
+  // Effects after handlers
+  useEffect(() => {
+    // Effect logic
+  }, []);
+  
+  // Loading state handling
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-verto-blue-primary"></div>
+      </div>
+    );
+  }
+  
+  // JSX render last
+  return (
+    <div className="bg-verto-gray-light p-4 rounded-lg shadow-sm">
+      <h2 className="text-xl font-semibold text-verto-blue-primary">{title}</h2>
+      {isActive && (
+        <div className="mt-4">Active content here</div>
+      )}
+    </div>
+  );
+}
+```
+
+### 2. Backend Development
+- Implement proper error handling with logger.error for all error cases
+- Use async/await patterns consistently with try/catch blocks
+- Protect all routes with isAuthenticated middleware
+- Follow existing MongoDB schema patterns with appropriate validation
+- Use environment variables for sensitive configuration
+
+#### Example API Route:
+```javascript
+const express = require('express');
+const router = express.Router();
+const logger = require('../utils/logger');
+const Model = require('../models/Model');
+
+// Middleware to check if user is authenticated
+const isAuthenticated = (req, res, next) => {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).json({ error: 'Not authenticated' });
+};
+
+// Get all items
+router.get('/', isAuthenticated, async (req, res) => {
+  try {
+    const items = await Model.find({ user: req.user._id });
+    res.json(items);
+  } catch (error) {
+    logger.error('Error fetching items:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch items',
+      message: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Create new item
+router.post('/', isAuthenticated, async (req, res) => {
+  try {
+    // Validation logic here
+    const newItem = await Model.create({
+      ...req.body,
+      user: req.user._id
+    });
+    
+    logger.info(`New item created with ID: ${newItem._id}`);
+    res.status(201).json(newItem);
+  } catch (error) {
+    logger.error('Error creating item:', error);
+    res.status(500).json({ error: 'Failed to create item' });
+  }
+});
+
+module.exports = router;
+```
+
+### 3. Authentication
+- Maintain strict domain validation for @vertodigital.com emails
+- Implement secure session handling with appropriate cookie settings
+- Consider CSRF protection for sensitive operations
+
+#### Example Authentication Check:
+```javascript
+// Double-check email domain even after authentication
+if (!req.user.email.endsWith('@vertodigital.com')) {
+  req.logout((err) => {
+    if (err) {
+      logger.error('Error during logout:', err);
+    }
+  });
+  return res.status(403).json({
+    isAuthenticated: false,
+    user: null,
+    error: 'Access denied: Only @vertodigital.com email addresses are allowed'
+  });
+}
+```
+
+### 4. API Integration
+- Use proper error handling for external API calls
+- Implement appropriate timeout settings for long-running operations
+- Maintain consistent response structures
+
+#### Example External API Call:
+```javascript
+try {
+  const response = await axios.post(apiUrl, requestData, {
+    headers: {
+      'Authorization': `Bearer ${process.env.API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    timeout: 30000 // 30 second timeout
+  });
+  
+  return response.data;
+} catch (error) {
+  logger.error('API call failed:', error.response?.data || error.message);
+  
+  if (error.response) {
+    // Server responded with non-2xx status
+    throw new Error(`API error: ${error.response.status} - ${error.response.data.message || 'Unknown error'}`);
+  } else if (error.request) {
+    // Request made but no response received
+    throw new Error('API timeout or no response received');
+  } else {
+    // Error setting up the request
+    throw new Error(`Request setup error: ${error.message}`);
+  }
+}
+```
+
+## DEVELOPMENT WORKFLOW
+1. First outline your approach before implementing code changes
+2. Follow existing patterns for new features
+3. Ensure proper TypeScript typing for all new components and functions
+4. Include appropriate logging for error tracking
+5. Implement responsive designs that work on mobile and desktop
+
+## DEPRECATED PATTERNS TO AVOID
+- DO NOT use class components for React; use functional components with hooks
+- DO NOT use jQuery or direct DOM manipulation; use React state and refs
+- DO NOT implement authentication without domain validation (@vertodigital.com)
+- DO NOT use global CSS; use Tailwind utility classes or CSS modules
+- DO NOT fetch data in useEffect; use React Server Components or data fetching libraries
+- DO NOT use cookies directly; rely on the established authentication flow
+
+## COMMON PITFALLS AND SOLUTIONS
+- Authentication fails in production: Check domain settings and CORS configuration
+- Session loss during redirects: Verify cookie settings match environment (sameSite, domain)
+- Custom hook patterns: Create hooks that encapsulate specific functionality, following the useX naming convention
+- State synchronization: Use React Context for cross-component state rather than prop drilling
+- API error handling: Always handle both network errors and API-returned errors separately
+
+## VERIFICATION STEPS
+When generating or modifying code, verify:
+1. Authentication protection: All routes must be protected with isAuthenticated middleware 
+   - FAIL: Any route that doesn't check authentication status
+   - PASS: All API endpoints use proper authentication checks
+
+2. Error handling: All async operations must have proper error handling
+   - FAIL: Try/catch blocks missing or incomplete error reporting
+   - PASS: Complete error paths with appropriate logging
+
+3. TypeScript compliance: Types must be properly defined for all props and state
+   - FAIL: Use of 'any' type or missing type definitions
+   - PASS: Complete interface and type definitions
+
+4. Loading states: UI must handle async operation states
+   - FAIL: Missing loading indicators or error messages
+   - PASS: Complete UX for loading, success, and error states
+
+5. Component structure: Follow the established pattern
+   - FAIL: Mixed hooks, handlers and effects
+   - PASS: Organized as hooks → handlers → effects → JSX
+
+6. Environment-specific configuration: Code must handle different environments
+   - FAIL: Hardcoded values that should be environment variables
+   - PASS: Proper use of process.env with appropriate fallbacks
+
+## ACKNOWLEDGMENT
+To confirm you are following these rules, begin your first response after loading these rules with "Following VertoDigital guidelines:" and then proceed with your response.
+
+When suggesting new features or changes, consider the overall architecture and follow the established patterns in the codebase. 

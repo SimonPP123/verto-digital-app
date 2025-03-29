@@ -71,6 +71,8 @@ export default function AssistantInterface() {
   const [currentTemplate, setCurrentTemplate] = useState<Template | null>(null);
   const [showGA4AccountIdModal, setShowGA4AccountIdModal] = useState(false);
   const [pendingAgent, setPendingAgent] = useState<Agent | null>(null);
+  // Add state to track if we're polling for BigQuery responses
+  const [isBigQueryPolling, setIsBigQueryPolling] = useState(false);
 
   useEffect(() => {
     // Fetch conversation sessions on component mount
@@ -79,6 +81,55 @@ export default function AssistantInterface() {
     // Fetch templates on component mount
     fetchTemplates();
   }, []);
+
+  // Add polling for BigQuery requests
+  useEffect(() => {
+    // Only poll if we have a current conversation and it's a BigQuery agent
+    if (!currentConversation || 
+        !currentConversation.agent || 
+        currentConversation.agent.name !== 'BigQuery Agent' ||
+        !isBigQueryPolling) {
+      return;
+    }
+
+    // Check if there's a processing message in the conversation
+    const hasProcessingMessage = currentConversation.messages.some(
+      msg => msg.role === 'assistant' && msg.content === 'Processing your BigQuery request...'
+    );
+
+    if (!hasProcessingMessage) {
+      // Stop polling if there's no processing message
+      setIsBigQueryPolling(false);
+      return;
+    }
+
+    // Set up polling interval
+    const intervalId = setInterval(async () => {
+      try {
+        // Call the status endpoint
+        const response = await fetch(`/api/assistant/bigquery/status/${currentConversation.conversationId}`);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.status === 'completed') {
+          // If processing is complete, fetch the updated conversation
+          await selectConversation(currentConversation.conversationId);
+          // Stop polling
+          setIsBigQueryPolling(false);
+        }
+      } catch (error) {
+        console.error('Error polling BigQuery status:', error);
+        // Log error but continue polling
+      }
+    }, 3000); // Poll every 3 seconds
+
+    // Cleanup interval on unmount or when polling stops
+    return () => clearInterval(intervalId);
+  }, [currentConversation, isBigQueryPolling]);
 
   const fetchConversationSessions = async () => {
     try {
@@ -303,6 +354,9 @@ export default function AssistantInterface() {
       setIsSendingMessage(true);
       setError(null);
 
+      // Check if this is a BigQuery agent
+      const isBigQueryAgent = currentConversation.agent?.name === 'BigQuery Agent';
+
       // Add the message to the UI immediately for a responsive feel
       const userMessage: MessageType = {
         role: 'user',
@@ -435,6 +489,16 @@ export default function AssistantInterface() {
               : conv
           );
         });
+
+        // Start polling if this is a BigQuery agent that's processing
+        if (isBigQueryAgent && 
+            data.updatedConversation.messages.some(
+              (msg: MessageType) => 
+                msg.role === 'assistant' && 
+                msg.content === 'Processing your BigQuery request...'
+            )) {
+          setIsBigQueryPolling(true);
+        }
       }
 
       if (!data.success) {
