@@ -435,15 +435,16 @@ router.post('/send', isAuthenticated, async (req, res) => {
         // Use production URL for callbacks in all environments
         const forcedBaseUrl = 'https://bolt.vertodigital.com';
         
-        // Create callback URLs that n8n can use directly - ensure properly encoded
-        const callbackUrlWithQuery = encodeURI(`${forcedBaseUrl}/api/assistant/bigquery/callback?conversationId=${conversationId}`);
-        const callbackUrlWithPath = encodeURI(`${forcedBaseUrl}/api/assistant/bigquery/callback/${conversationId}`);
+        // Create callback URLs that n8n can use directly - simplified for better compatibility
+        const callbackUrlSimple = `${forcedBaseUrl}/api/assistant/bigquery/callback`;
+        const callbackUrlWithPath = `${forcedBaseUrl}/api/assistant/bigquery/callback/${conversationId}`;
         
         // Add callback URLs to the payload
         const callbackPayload = {
           ...requestPayload,
           callbackUrl: callbackUrlWithPath,
-          callbackUrlWithQuery,
+          callbackUrlWithQuery: callbackUrlSimple,
+          conversationId, // Add explicitly at the top level for easier access
           useCallback: true,
           messageNumber: Math.max(1, conversation.messages.length - 1) // Fix messageNumber to be 1 for first message
         };
@@ -476,7 +477,7 @@ router.post('/send', isAuthenticated, async (req, res) => {
               conversationId,
               n8nUrl,
               callbackUrlWithPath,
-              callbackUrlWithQuery,
+              callbackUrlWithQuery: callbackUrlSimple,
               messageNumber: callbackPayload.messageNumber
             });
           } catch (error) {
@@ -1344,12 +1345,39 @@ router.post('/bigquery/callback', express.text({ type: '*/*' }), async (req, res
         if (!conversationId && jsonContent.body && typeof jsonContent.body === 'object') {
           if (jsonContent.body.conversationId) {
             conversationId = jsonContent.body.conversationId;
-            logger.info('Extracted conversationId from JSON body.conversationId:', { conversationId });
+            logger.info('Extracted conversationId from JSON body.body.conversationId:', { conversationId });
+          }
+        }
+        
+        // Check if this is an n8n webhook payload
+        if (!conversationId && jsonContent.body) {
+          // n8n often uses this structure for variables from previous nodes
+          // Check if using raw format with {{ $('Webhook').item.json.body.conversationId }}
+          const jsonString = JSON.stringify(jsonContent);
+          
+          // Try to extract conversationId from common n8n template patterns
+          const n8nTemplateMatch = jsonString.match(/conversationId['"]*\s*:\s*['"]*([a-f0-9-]+)['"]*/) ||
+                                   jsonString.match(/conversationId=([a-f0-9-]+)/) ||
+                                   jsonString.match(/[\/\?]([a-f0-9-]{36})/);
+          
+          if (n8nTemplateMatch && n8nTemplateMatch[1]) {
+            conversationId = n8nTemplateMatch[1];
+            logger.info('Extracted conversationId from n8n template pattern:', { conversationId, matchPattern: n8nTemplateMatch[0] });
           }
         }
       } catch (parseError) {
         logger.error('Error parsing JSON content in BigQuery callback:', parseError);
         // Continue with raw content
+      }
+    }
+    
+    // Last resort - try to find a conversationId pattern in the raw string
+    if (!conversationId && typeof rawContent === 'string') {
+      // Check if the raw content contains a UUID pattern
+      const uuidMatch = rawContent.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+      if (uuidMatch) {
+        conversationId = uuidMatch[1];
+        logger.info('Extracted conversationId from UUID pattern in raw content:', { conversationId });
       }
     }
     
