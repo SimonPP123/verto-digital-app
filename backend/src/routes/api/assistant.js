@@ -315,17 +315,9 @@ router.post('/send', isAuthenticated, async (req, res) => {
             ...requestPayload,
             accessToken: ga4Token,
             useCallback: true,
-            messageNumber: conversation.messages.length, // Add message number parameter
+            messageNumber: Math.max(1, conversation.messages.length - 1), // Fix messageNumber to be 1 for first message
             callbackUrl
           };
-          
-          // Log token status (redacted for security)
-          logger.info('GA4 access token status:', {
-            hasToken: !!ga4Token,
-            tokenLength: ga4Token ? ga4Token.length : 0,
-            isNull: ga4Token === null,
-            isUndefined: ga4Token === undefined
-          });
           
           // Start a background process to send the request to n8n
           (async () => {
@@ -336,6 +328,15 @@ router.post('/send', isAuthenticated, async (req, res) => {
               if (!n8nUrl) {
                 throw new Error('N8N_GOOGLE_ANALYTICS_4 environment variable is not set');
               }
+              
+              // Log the token status for debugging
+              logger.info('Sending GA4 request to n8n:', {
+                hasToken: !!ga4Token,
+                tokenType: typeof ga4Token,
+                tokenLength: ga4Token ? ga4Token.length : 0,
+                urlLength: n8nUrl.length,
+                messageNumber: asyncPayload.messageNumber
+              });
               
               // Make a direct request to the n8n webhook URL instead of using processAnalyticsQuery
               const response = await fetch(n8nUrl, {
@@ -433,7 +434,7 @@ router.post('/send', isAuthenticated, async (req, res) => {
           callbackUrl: callbackUrlWithPath,
           callbackUrlWithQuery,
           useCallback: true,
-          messageNumber: conversation.messages.length // Add message number parameter
+          messageNumber: Math.max(1, conversation.messages.length - 1) // Fix messageNumber to be 1 for first message
         };
         
         // Start a background process to send the request to n8n

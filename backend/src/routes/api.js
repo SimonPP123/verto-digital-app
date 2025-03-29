@@ -2397,10 +2397,11 @@ router.get('/analytics/auth/status', isAuthenticated, async (req, res) => {
       // TODO: Implement token refresh logic here
     }
     
-    // User is authenticated with GA4 - include the access token in the response
+    // User is authenticated with GA4
     return res.json({
       authenticated: true,
-      accessToken: auth.accessToken // Include the access token for the client
+      accessToken: auth.accessToken, // Return the access token to the client
+      expiresAt: auth.expiresAt
     });
   } catch (error) {
     logger.error('Error checking GA4 auth status:', error);
@@ -2659,9 +2660,20 @@ router.post('/analytics/query', isAuthenticated, async (req, res) => {
       // Start background process to make the request
       (async () => {
         try {
+          logger.info('Building GA4 request with token:', {
+            hasAccessToken: !!auth.accessToken,
+            tokenType: typeof auth.accessToken,
+            tokenLength: auth.accessToken ? auth.accessToken.length : 0,
+            messageNumber: req.body.messageNumber || 'not provided',
+            hasRequestToken: !!req.body.accessToken
+          });
+          
+          // Use the provided token from request if available, otherwise use the one from database
+          const tokenToUse = req.body.accessToken || auth.accessToken;
+          
           await axios.post(n8nUrl, {
             ...req.body,
-            accessToken: auth.accessToken,
+            accessToken: tokenToUse, // Use the token from the request if provided, else use the one from auth
             userId: userId.toString(),
             callbackUrl
           }, {
