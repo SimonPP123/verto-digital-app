@@ -5,11 +5,29 @@ import React, { useState, useRef, useEffect } from 'react';
 type MessageControlsProps = {
   onSendMessage: (message: string) => void;
   isSending: boolean;
+  draftMessage?: string;
+  setDraftMessage?: (message: string) => void;
 };
 
-export default function MessageControls({ onSendMessage, isSending }: MessageControlsProps) {
+export default function MessageControls({ 
+  onSendMessage, 
+  isSending, 
+  draftMessage = '', 
+  setDraftMessage 
+}: MessageControlsProps) {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  // Use the draft message when it changes
+  useEffect(() => {
+    if (draftMessage) {
+      setMessage(draftMessage);
+      // Also clear the draft in the parent component
+      if (setDraftMessage) {
+        setDraftMessage('');
+      }
+    }
+  }, [draftMessage, setDraftMessage]);
   
   useEffect(() => {
     if (textareaRef.current) {

@@ -955,86 +955,112 @@ router.get('/templates/:id', isAuthenticated, async (req, res) => {
 // Create a new template
 router.post('/templates', isAuthenticated, async (req, res) => {
   try {
-    const { error } = assistantTemplateSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Invalid request format',
-        message: error.details[0].message 
-      });
+    const { title, content, variables, isPublic } = req.body;
+    
+    // Perform basic validation
+    if (!title || !content) {
+      return res.status(400).json({ error: 'Title and content are required' });
     }
     
+    // Validate variables format
+    if (variables && Array.isArray(variables)) {
+      for (const variable of variables) {
+        if (!variable.name) {
+          return res.status(400).json({ error: 'All variables must have a name' });
+        }
+        
+        if (!['text', 'multiChoice', 'date', 'dateRange'].includes(variable.type)) {
+          return res.status(400).json({ error: 'Invalid variable type' });
+        }
+        
+        // If the variable type is multiChoice, ensure options is an array
+        if (variable.type === 'multiChoice' && (!Array.isArray(variable.options) || variable.options.length === 0)) {
+          return res.status(400).json({ error: 'MultiChoice variables must have options' });
+        }
+        
+        // Validate uiType if provided
+        if (variable.uiType && !['select', 'multiChoice'].includes(variable.uiType)) {
+          return res.status(400).json({ error: 'Invalid UI type' });
+        }
+      }
+    }
+    
+    // Create new template
     const template = new AssistantTemplate({
-      title: req.body.title,
-      content: req.body.content,
-      variables: req.body.variables || [],
-      isPublic: req.body.isPublic || false,
+      title,
+      content,
+      variables: variables || [],
+      isPublic: !!isPublic,
       user: req.user._id
     });
     
     await template.save();
     
-    res.status(201).json({ 
-      success: true, 
-      template 
-    });
+    res.status(201).json(template);
   } catch (error) {
-    logger.error('Error creating template:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to create template',
-      message: error.message 
-    });
+    console.error('Error creating template:', error);
+    res.status(500).json({ error: 'Failed to create template' });
   }
 });
 
 // Update a template
 router.put('/templates/:id', isAuthenticated, async (req, res) => {
   try {
-    const { error } = assistantTemplateSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Invalid request format',
-        message: error.details[0].message 
-      });
+    const { title, content, variables, isPublic } = req.body;
+    
+    // Perform basic validation
+    if (!title || !content) {
+      return res.status(400).json({ error: 'Title and content are required' });
     }
     
+    // Find the template and check ownership
     const template = await AssistantTemplate.findById(req.params.id);
     
     if (!template) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Template not found' 
-      });
+      return res.status(404).json({ error: 'Template not found' });
     }
     
-    // Check if the template belongs to the user
-    if (!template.user.equals(req.user._id)) {
-      return res.status(403).json({ 
-        success: false, 
-        error: 'You do not have permission to update this template' 
-      });
+    // Check if the user owns the template or if they're admin
+    if (template.user.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'You do not have permission to update this template' });
     }
     
-    template.title = req.body.title;
-    template.content = req.body.content;
-    template.variables = req.body.variables || [];
-    template.isPublic = req.body.isPublic || false;
+    // Validate variables format
+    if (variables && Array.isArray(variables)) {
+      for (const variable of variables) {
+        if (!variable.name) {
+          return res.status(400).json({ error: 'All variables must have a name' });
+        }
+        
+        if (!['text', 'multiChoice', 'date', 'dateRange'].includes(variable.type)) {
+          return res.status(400).json({ error: 'Invalid variable type' });
+        }
+        
+        // If the variable type is multiChoice, ensure options is an array
+        if (variable.type === 'multiChoice' && (!Array.isArray(variable.options) || variable.options.length === 0)) {
+          return res.status(400).json({ error: 'MultiChoice variables must have options' });
+        }
+        
+        // Validate uiType if provided
+        if (variable.uiType && !['select', 'multiChoice'].includes(variable.uiType)) {
+          return res.status(400).json({ error: 'Invalid UI type' });
+        }
+      }
+    }
+    
+    // Update the template
+    template.title = title;
+    template.content = content;
+    template.variables = variables || [];
+    template.isPublic = !!isPublic;
+    template.updatedAt = Date.now();
     
     await template.save();
     
-    res.json({ 
-      success: true, 
-      template 
-    });
+    res.json(template);
   } catch (error) {
-    logger.error('Error updating template:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to update template',
-      message: error.message 
-    });
+    console.error('Error updating template:', error);
+    res.status(500).json({ error: 'Failed to update template' });
   }
 });
 

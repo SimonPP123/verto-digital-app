@@ -19,6 +19,11 @@ const assistantTemplateSchema = new mongoose.Schema({
       enum: ['text', 'multiChoice', 'date', 'dateRange'],
       default: 'text'
     },
+    uiType: {
+      type: String,
+      enum: ['select', 'multiChoice'],
+      default: null
+    },
     options: [String] // For multiChoice variables
   }],
   isPublic: {

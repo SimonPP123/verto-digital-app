@@ -64,6 +64,8 @@ export default function AssistantInterface() {
   const [isBigQueryPolling, setIsBigQueryPolling] = useState(false);
   // Add state to track if we're polling for GA4 responses
   const [isGA4Polling, setIsGA4Polling] = useState(false);
+  // Add a new state for draft message (template content)
+  const [draftMessage, setDraftMessage] = useState<string>('');
 
   useEffect(() => {
     // Fetch conversation sessions on component mount
@@ -683,6 +685,7 @@ export default function AssistantInterface() {
     window.open(`/api/assistant/conversations/${conversationId}/export`, '_blank');
   };
 
+  // Update the useTemplate function to not send messages directly
   const useTemplate = async (template: Template) => {
     // Find variables in the template
     const variableRegex = /\{\{([^}]+)\}\}/g;
@@ -714,8 +717,8 @@ export default function AssistantInterface() {
         setCurrentTemplate(template);
         setShowTemplateVarsModal(true);
       } else {
-        // Template has no variables, use as is
-        sendMessage(template.content);
+        // Template has no variables, set as draft immediately
+        setDraftMessage(template.content);
       }
     } catch (error) {
       console.error('Error using template:', error);
@@ -723,6 +726,7 @@ export default function AssistantInterface() {
     }
   };
   
+  // Update handleVariablesSubmit to set draft message instead of sending
   const handleVariablesSubmit = (values: Record<string, string>) => {
     if (!currentTemplate || !currentConversation) return;
     
@@ -735,8 +739,8 @@ export default function AssistantInterface() {
       return values[variableName] || match;
     });
     
-    // Send message and close modal
-    sendMessage(messageContent);
+    // Set draft message instead of sending directly
+    setDraftMessage(messageContent);
     setShowTemplateVarsModal(false);
     setCurrentTemplate(null);
   };
@@ -1002,6 +1006,8 @@ export default function AssistantInterface() {
               <MessageControls 
                 onSendMessage={(message) => sendMessage(message)}
                 isSending={isSendingMessage}
+                draftMessage={draftMessage}
+                setDraftMessage={setDraftMessage}
               />
             </div>
           </>
