@@ -2,6 +2,8 @@
 
 import React, { useState } from 'react';
 import { format } from 'date-fns';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 
 // Update the TemplateVariable type to match what's in TemplateVariablesModal
 export type VariableType = 'text' | 'select' | 'multiChoice' | 'date' | 'dateRange';
@@ -59,6 +61,97 @@ export default function TemplatesSidebar({
   const handleAddTemplate = () => {
     setShowTemplateForm(true);
     resetForm();
+  };
+  
+  const addGA4TemplateExample = () => {
+    const ga4Template = {
+      title: "GA4 Report - Last 30 Days",
+      content: `### Data Request
+I need a Google Analytics 4 report for property ID {{propertyId}} that analyzes data from {{startDate}} to {{endDate}}.
+
+Please include the following metrics:
+- Active Users
+- Sessions
+- Conversion Rate
+- Average Engagement Time
+
+Please segment the data by:
+- Date
+- Device Category
+- Country
+
+I'd like to see a comparison with the previous period and need both a summary analysis and data visualization.
+
+Please highlight any significant trends or anomalies in the data.`,
+      variables: [
+        {
+          name: "propertyId",
+          description: "Your Google Analytics 4 Property ID",
+          defaultValue: "",
+          type: "text"
+        },
+        {
+          name: "startDate",
+          description: "Start date for analytics data",
+          defaultValue: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          type: "date"
+        },
+        {
+          name: "endDate",
+          description: "End date for analytics data",
+          defaultValue: new Date().toISOString().split('T')[0],
+          type: "date"
+        }
+      ],
+      isPublic: true
+    };
+    
+    setEditingTemplate(null);
+    setTemplateTitle(ga4Template.title);
+    setTemplateContent(ga4Template.content);
+    setTemplateVariables(ga4Template.variables as TemplateVariable[]);
+    setIsPublic(ga4Template.isPublic);
+    setShowTemplateForm(true);
+  };
+  
+  const addDateRangeTemplateExample = () => {
+    const dateRangeTemplate = {
+      title: "GA4 Report - Custom Date Range",
+      content: `### Custom Date Range Analysis Request
+I need a comprehensive Google Analytics 4 analysis for property ID {{propertyId}} covering the specific date range from {{dateRange}}.
+
+Please analyze the following metrics for this custom period:
+- User engagement metrics
+- Conversion data
+- Traffic sources
+- Page performance
+
+Please compare this period to the previous equivalent period and highlight any significant changes or patterns.
+
+I'd also like to see visualizations of key trends within this timeframe.`,
+      variables: [
+        {
+          name: "propertyId",
+          description: "Your Google Analytics 4 Property ID",
+          defaultValue: "",
+          type: "text"
+        },
+        {
+          name: "dateRange",
+          description: "Analysis date range",
+          defaultValue: `${new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]} to ${new Date().toISOString().split('T')[0]}`,
+          type: "dateRange"
+        }
+      ],
+      isPublic: true
+    };
+    
+    setEditingTemplate(null);
+    setTemplateTitle(dateRangeTemplate.title);
+    setTemplateContent(dateRangeTemplate.content);
+    setTemplateVariables(dateRangeTemplate.variables as TemplateVariable[]);
+    setIsPublic(dateRangeTemplate.isPublic);
+    setShowTemplateForm(true);
   };
   
   const handleEditTemplate = (template: Template) => {
@@ -229,12 +322,28 @@ export default function TemplatesSidebar({
         <div className="flex flex-col space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-700">Templates</h2>
-            <button
-              onClick={handleAddTemplate}
-              className="text-xs sm:text-sm px-2 py-1 sm:px-3 sm:py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              + New Template
-            </button>
+            <div className="flex space-x-2">
+              <button
+                onClick={addGA4TemplateExample}
+                className="text-xs sm:text-sm px-2 py-1 sm:px-3 sm:py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                title="Add GA4 report template with date range"
+              >
+                + GA4 Template
+              </button>
+              <button
+                onClick={addDateRangeTemplateExample}
+                className="text-xs sm:text-sm px-2 py-1 sm:px-3 sm:py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                title="Add GA4 report template with custom date range"
+              >
+                + Date Range Template
+              </button>
+              <button
+                onClick={handleAddTemplate}
+                className="text-xs sm:text-sm px-2 py-1 sm:px-3 sm:py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                + New Template
+              </button>
+            </div>
           </div>
           
           <div className="flex items-center space-x-2 w-full">
@@ -394,6 +503,9 @@ export default function TemplatesSidebar({
                           >
                             <option value="text">Text</option>
                             <option value="select">Select (Dropdown)</option>
+                            <option value="multiChoice">Multiple Choice</option>
+                            <option value="date">Date</option>
+                            <option value="dateRange">Date Range</option>
                           </select>
                         </div>
                         
@@ -452,6 +564,133 @@ export default function TemplatesSidebar({
                                 </ul>
                               </div>
                             )}
+                          </div>
+                        )}
+                        
+                        {variable.type === 'multiChoice' && (
+                          <div>
+                            <div className="flex items-center mb-1">
+                              <label className="block text-xs text-gray-600 flex-1">Options (Multiple Selection)</label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!optionInput.trim()) return;
+                                  
+                                  const currentOptions = variable.options || '';
+                                  handleVariableChange(index, 'options', currentOptions ? 
+                                    `${currentOptions}\n${optionInput.trim()}` : optionInput.trim());
+                                  setOptionInput('');
+                                }}
+                                className="text-xs px-1 py-0.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                                disabled={!optionInput.trim()}
+                              >
+                                + Add
+                              </button>
+                            </div>
+                            
+                            <div className="flex mb-1">
+                              <input
+                                type="text"
+                                value={optionInput}
+                                onChange={(e) => setOptionInput(e.target.value)}
+                                className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-l focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                placeholder="Enter option value"
+                              />
+                            </div>
+                            
+                            {variable.options && variable.options.trim() && (
+                              <div className="bg-white p-1 border border-gray-200 rounded max-h-24 overflow-y-auto">
+                                <ul className="space-y-1">
+                                  {variable.options.split('\n').filter(Boolean).map((option: string, optIdx: number) => (
+                                    <li key={optIdx} className="flex items-center justify-between text-xs">
+                                      <span className="truncate">{option}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const options = variable.options?.split('\n').filter(Boolean) || [];
+                                          options.splice(optIdx, 1);
+                                          handleVariableChange(index, 'options', options.join('\n'));
+                                        }}
+                                        className="text-red-500 hover:text-red-700 ml-1"
+                                      >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {variable.type === 'date' && (
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Default Date</label>
+                            <div className="text-xs text-gray-500 mb-1">Format: YYYY-MM-DD</div>
+                            <DatePicker
+                              selected={variable.defaultValue ? new Date(variable.defaultValue) : new Date()}
+                              onChange={(date: Date | null) => {
+                                if (!date) return;
+                                // Format date as YYYY-MM-DD
+                                const formattedDate = date.toISOString().split('T')[0];
+                                handleVariableChange(index, 'defaultValue', formattedDate);
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                              dateFormat="yyyy-MM-dd"
+                            />
+                          </div>
+                        )}
+                        
+                        {variable.type === 'dateRange' && (
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Default Date Range</label>
+                            <div className="text-xs text-gray-500 mb-1">Format: YYYY-MM-DD to YYYY-MM-DD</div>
+                            <div className="flex space-x-2">
+                              <div className="flex-1">
+                                <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+                                <DatePicker
+                                  selected={variable.defaultValue && variable.defaultValue.includes(' to ') 
+                                    ? new Date(variable.defaultValue.split(' to ')[0]) 
+                                    : new Date()}
+                                  onChange={(date: Date | null) => {
+                                    if (!date) return;
+                                    // Get current end date or today
+                                    const endDateStr = variable.defaultValue && variable.defaultValue.includes(' to ')
+                                      ? variable.defaultValue.split(' to ')[1]
+                                      : new Date().toISOString().split('T')[0];
+                                    // Format start date as YYYY-MM-DD
+                                    const startDateStr = date.toISOString().split('T')[0];
+                                    // Combine into a range
+                                    handleVariableChange(index, 'defaultValue', `${startDateStr} to ${endDateStr}`);
+                                  }}
+                                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                  dateFormat="yyyy-MM-dd"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <label className="block text-xs text-gray-500 mb-1">End Date</label>
+                                <DatePicker
+                                  selected={variable.defaultValue && variable.defaultValue.includes(' to ') 
+                                    ? new Date(variable.defaultValue.split(' to ')[1]) 
+                                    : new Date()}
+                                  onChange={(date: Date | null) => {
+                                    if (!date) return;
+                                    // Get current start date or today
+                                    const startDateStr = variable.defaultValue && variable.defaultValue.includes(' to ')
+                                      ? variable.defaultValue.split(' to ')[0]
+                                      : new Date().toISOString().split('T')[0];
+                                    // Format end date as YYYY-MM-DD
+                                    const endDateStr = date.toISOString().split('T')[0];
+                                    // Combine into a range
+                                    handleVariableChange(index, 'defaultValue', `${startDateStr} to ${endDateStr}`);
+                                  }}
+                                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                  dateFormat="yyyy-MM-dd"
+                                />
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
