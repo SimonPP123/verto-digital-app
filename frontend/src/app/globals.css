@@ -52,4 +52,30 @@ body {
   .verto-card {
     @apply bg-white rounded-lg shadow-md border border-gray-200 p-6;
   }
+
+  /* Chart display enhancements */
+  .chart-container {
+    @apply my-6 bg-white rounded-lg border border-gray-200 shadow-sm p-3 overflow-hidden;
+  }
+  
+  .chart-container img {
+    @apply transition-all duration-300 max-w-full h-auto mx-auto;
+  }
+  
+  .chart-container:hover img {
+    @apply shadow-md;
+  }
+  
+  /* Chart zoom modal improvements */
+  .chart-modal {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4;
+  }
+  
+  .chart-modal-content {
+    @apply max-w-[95%] max-h-[95vh] bg-white rounded-lg shadow-xl overflow-hidden;
+  }
+  
+  .chart-modal-image {
+    @apply max-w-full max-h-[75vh] object-contain p-4 bg-gray-50;
+  }
 }

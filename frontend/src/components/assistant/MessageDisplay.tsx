@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { format } from 'date-fns';
 
 type MessageProps = {
@@ -16,10 +16,37 @@ export default function MessageDisplay({ message }: MessageProps) {
     ? new Date(message.timestamp) 
     : message.timestamp;
   
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  const [zoomedImageAlt, setZoomedImageAlt] = useState<string>('');
+  
+  // Helper function to handle zooming in on an image
+  const handleImageClick = (imageUrl: string, altText: string) => {
+    setZoomedImage(imageUrl);
+    setZoomedImageAlt(altText);
+  };
+  
+  // Helper function to close zoomed image modal
+  const closeZoomedImage = () => {
+    setZoomedImage(null);
+    setZoomedImageAlt('');
+  };
+  
   // Helper function to render content with markdown elements
   const renderContent = (content: string) => {
+    // Check for raw chart URLs that aren't properly formatted as markdown images
+    const chartUrlPattern = /(https:\/\/quickchart\.io\/chart\?[^\s"<>]+)/g;
+    let modifiedContent = content;
+    
+    // Convert raw chart URLs to markdown image format
+    if (chartUrlPattern.test(content)) {
+      modifiedContent = content.replace(
+        chartUrlPattern, 
+        match => `![GA4 Analysis Chart](${match})`
+      );
+    }
+    
     // Split by code blocks first
-    const parts = content.split(/(```[\s\S]*?```)/g);
+    const parts = modifiedContent.split(/(```[\s\S]*?```)/g);
     
     return parts.map((part, index) => {
       // Check if this part is a code block
@@ -130,6 +157,14 @@ export default function MessageDisplay({ message }: MessageProps) {
           </h4>
         );
       }
+      // Check for horizontal rule
+      else if (trimmedLine.match(/^(\*{3,}|-{3,}|_{3,})$/)) {
+        flushParagraph();
+        flushTable();
+        result.push(
+          <hr key={`hr-${blockIndex}-${i}`} className="my-5 border-t border-gray-300" />
+        );
+      }
       // Check for lists
       else if (trimmedLine.match(/^(\d+\.|[-*+])\s/)) {
         flushParagraph();
@@ -199,6 +234,69 @@ export default function MessageDisplay({ message }: MessageProps) {
   
   // Process inline markdown (bold, italic, etc.)
   const processInlineMarkdown = (text: string) => {
+    // Check for markdown image links first
+    const imageRegex = /!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g;
+    const hasImages = imageRegex.test(text);
+    
+    if (hasImages) {
+      // Reset regex lastIndex for reuse
+      imageRegex.lastIndex = 0;
+      
+      const parts = [];
+      let lastIndex = 0;
+      let match;
+      
+      while ((match = imageRegex.exec(text)) !== null) {
+        // Add text before the image
+        if (match.index > lastIndex) {
+          const beforeText = text.substring(lastIndex, match.index);
+          parts.push(<span key={`text-${lastIndex}`} dangerouslySetInnerHTML={{ __html: processMarkdownText(beforeText) }} />);
+        }
+        
+        // Add the image
+        const [, altText, imageUrl] = match;
+        
+        // Check if this is a chart from QuickChart.io
+        const isChart = imageUrl.includes('quickchart.io/chart');
+        
+        parts.push(
+          <div key={`img-${match.index}`} className={`my-4 ${isChart ? 'chart-container relative' : ''}`}>
+            <img 
+              src={imageUrl} 
+              alt={altText} 
+              className={`${isChart ? 'max-w-full h-auto rounded-lg shadow-md cursor-pointer transition-all hover:shadow-lg hover:scale-[1.01] border border-gray-200' : 'inline-block max-w-full h-auto'}`}
+              loading="lazy"
+              onClick={() => isChart && handleImageClick(imageUrl, altText)}
+            />
+            {isChart && (
+              <>
+                <div className="text-xs text-gray-500 mt-1 text-center">{altText}</div>
+                <div className="absolute top-2 right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full opacity-80">
+                  Click to enlarge
+                </div>
+              </>
+            )}
+          </div>
+        );
+        
+        lastIndex = imageRegex.lastIndex;
+      }
+      
+      // Add any remaining text
+      if (lastIndex < text.length) {
+        const remainingText = text.substring(lastIndex);
+        parts.push(<span key={`text-${lastIndex}`} dangerouslySetInnerHTML={{ __html: processMarkdownText(remainingText) }} />);
+      }
+      
+      return <>{parts}</>;
+    }
+    
+    // If no images, process as regular markdown text
+    return <span dangerouslySetInnerHTML={{ __html: processMarkdownText(text) }} />;
+  };
+  
+  // Helper function to process regular markdown text without images
+  const processMarkdownText = (text: string) => {
     // Replace ** or __ with bold
     let processed = text.replace(/(\*\*|__)(.*?)\1/g, '<strong>$2</strong>');
     
@@ -208,12 +306,7 @@ export default function MessageDisplay({ message }: MessageProps) {
     // Replace ` with inline code
     processed = processed.replace(/`(.*?)`/g, '<code>$1</code>');
     
-    // If any HTML tags were inserted, we need to render with dangerouslySetInnerHTML
-    if (processed !== text) {
-      return <span dangerouslySetInnerHTML={{ __html: processed }} />;
-    }
-    
-    return text;
+    return processed;
   };
   
   // Render a table from markdown-style or ASCII-style tables
@@ -300,6 +393,44 @@ export default function MessageDisplay({ message }: MessageProps) {
           {renderContent(message.content)}
         </div>
       </div>
+      
+      {/* Image Zoom Modal */}
+      {zoomedImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4" onClick={closeZoomedImage}>
+          <div className="max-w-[95%] max-h-[95%] bg-white rounded-lg shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-4 border-b">
+              <h3 className="text-lg font-medium text-gray-900 truncate">{zoomedImageAlt}</h3>
+              <button 
+                className="text-gray-500 hover:text-gray-800" 
+                onClick={closeZoomedImage}
+                aria-label="Close"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-4 bg-gray-100 flex items-center justify-center">
+              <img 
+                src={zoomedImage} 
+                alt={zoomedImageAlt} 
+                className="max-w-full max-h-[70vh] object-contain"
+              />
+            </div>
+            <div className="p-3 bg-white border-t text-center">
+              <div className="text-sm text-gray-600">{zoomedImageAlt}</div>
+              <a 
+                href={zoomedImage} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="inline-block mt-2 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+              >
+                Open image in new tab
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 
