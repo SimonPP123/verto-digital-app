@@ -41,7 +41,11 @@ export default function MessageDisplay({ message }: MessageProps) {
     if (chartUrlPattern.test(content)) {
       modifiedContent = content.replace(
         chartUrlPattern, 
-        match => `![GA4 Analysis Chart](${match.slice(1, -1)})`
+        match => {
+          // Remove the parentheses and ensure proper URL encoding
+          const url = match.slice(1, -1);
+          return `![GA4 Analysis Chart](${url})`;
+        }
       );
     }
     
@@ -64,7 +68,7 @@ export default function MessageDisplay({ message }: MessageProps) {
                   {language}
                 </div>
               )}
-              <pre className="bg-gray-900 text-gray-100 p-3 overflow-x-auto whitespace-pre-wrap break-words w-full">
+              <pre className="bg-gray-900 text-gray-100 p-3 overflow-x-auto whitespace-pre-wrap break-words w-full max-w-full">
                 <code className="break-words block w-full">{code}</code>
               </pre>
             </div>
@@ -263,17 +267,17 @@ export default function MessageDisplay({ message }: MessageProps) {
         const encodedUrl = isChart ? imageUrl.replace(/\s/g, '%20') : imageUrl;
         
         parts.push(
-          <div key={`img-${match.index}`} className={`my-4 ${isChart ? 'chart-container relative w-full' : ''}`}>
+          <div key={`img-${match.index}`} className={`my-4 ${isChart ? 'chart-container relative w-full max-w-full overflow-hidden' : ''}`}>
             <img 
               src={encodedUrl} 
               alt={altText} 
-              className={`${isChart ? 'w-full h-auto max-h-[400px] object-contain rounded-lg shadow-md cursor-pointer transition-all hover:shadow-lg hover:scale-[1.01] border border-gray-200' : 'inline-block max-w-full h-auto'}`}
+              className={`${isChart ? 'w-full h-auto max-h-[400px] object-contain rounded-lg shadow-md cursor-pointer border border-gray-200' : 'inline-block max-w-full h-auto'}`}
               loading="lazy"
               onClick={() => isChart && handleImageClick(encodedUrl, altText)}
             />
             {isChart && (
               <>
-                <div className="text-xs text-gray-500 mt-1 text-center">{altText}</div>
+                <div className="text-xs text-gray-500 mt-1 text-center truncate">{altText}</div>
                 <div className="absolute top-2 right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full opacity-80">
                   Click to enlarge
                 </div>
@@ -334,9 +338,9 @@ export default function MessageDisplay({ message }: MessageProps) {
     }
     
     return (
-      <div key={`table-container-${blockIndex}`} className="overflow-x-auto my-4 w-full">
-        <div className="min-w-full inline-block">
-          <table className="w-full border-collapse border border-gray-300">
+      <div key={`table-container-${blockIndex}`} className="overflow-x-auto my-4 w-full max-w-full">
+        <div className="inline-block max-w-full">
+          <table className="w-full border-collapse border border-gray-300 table-fixed">
             <tbody>
               {dataRows.map((row, rowIdx) => {
                 const cells = row.split('|').filter(Boolean).map(cell => cell.trim());
@@ -354,7 +358,7 @@ export default function MessageDisplay({ message }: MessageProps) {
                       return isHeader ? (
                         <th 
                           key={cellIdx} 
-                          className="px-4 py-2 border border-gray-300 font-medium whitespace-normal break-words"
+                          className="px-4 py-2 border border-gray-300 font-medium whitespace-normal break-words max-w-xs"
                           style={style as React.CSSProperties}
                         >
                           {processInlineMarkdown(cell)}
@@ -362,7 +366,7 @@ export default function MessageDisplay({ message }: MessageProps) {
                       ) : (
                         <td 
                           key={cellIdx} 
-                          className="px-4 py-2 border border-gray-300 whitespace-normal break-words"
+                          className="px-4 py-2 border border-gray-300 whitespace-normal break-words max-w-xs"
                           style={style as React.CSSProperties}
                         >
                           {processInlineMarkdown(cell)}
@@ -381,7 +385,7 @@ export default function MessageDisplay({ message }: MessageProps) {
   
   return (
     <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-      <div className={`rounded-lg p-3 w-[80%] max-w-[80%] ${
+      <div className={`rounded-lg p-3 w-[80%] max-w-[80%] overflow-hidden ${
         message.role === 'user' 
           ? 'bg-blue-500 text-white' 
           : 'bg-white border border-gray-200 text-gray-800'
