@@ -34,7 +34,7 @@ export default function MessageDisplay({ message }: MessageProps) {
   // Helper function to render content with markdown elements
   const renderContent = (content: string) => {
     // Check for raw chart URLs that aren't properly formatted as markdown images
-    const chartUrlPattern = /(https:\/\/quickchart\.io\/chart\?c=[^"\s<>]+)/g;
+    const chartUrlPattern = /(https:\/\/quickchart\.io\/chart\?[^"\s<>]+)/g;
     let modifiedContent = content;
     
     // Convert raw chart URLs to markdown image format
@@ -235,7 +235,7 @@ export default function MessageDisplay({ message }: MessageProps) {
   // Process inline markdown (bold, italic, etc.)
   const processInlineMarkdown = (text: string) => {
     // Check for markdown image links first
-    const imageRegex = /!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g;
+    const imageRegex = /!\[(.*?)\]\((https?:\/\/[^)]+)\)/g;
     const hasImages = imageRegex.test(text);
     
     if (hasImages) {
