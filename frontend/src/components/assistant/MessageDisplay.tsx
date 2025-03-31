@@ -34,7 +34,7 @@ export default function MessageDisplay({ message }: MessageProps) {
   // Helper function to render content with markdown elements
   const renderContent = (content: string) => {
     // Check for raw chart URLs that aren't properly formatted as markdown images
-    const chartUrlPattern = /(https:\/\/quickchart\.io\/chart\?[^\s"<>]+)/g;
+    const chartUrlPattern = /(https:\/\/quickchart\.io\/chart\?c=[^"\s<>]+)/g;
     let modifiedContent = content;
     
     // Convert raw chart URLs to markdown image format
@@ -58,14 +58,14 @@ export default function MessageDisplay({ message }: MessageProps) {
           const [, language, code] = match;
           
           return (
-            <div key={index} className="my-2 rounded-md overflow-hidden">
+            <div key={index} className="my-2 rounded-md overflow-hidden w-full">
               {language && (
                 <div className="bg-gray-800 text-gray-200 text-xs py-1 px-3">
                   {language}
                 </div>
               )}
-              <pre className="bg-gray-900 text-gray-100 p-3 overflow-x-auto whitespace-pre-wrap break-words">
-                <code className="break-words">{code}</code>
+              <pre className="bg-gray-900 text-gray-100 p-3 overflow-x-auto whitespace-pre-wrap break-words w-full">
+                <code className="break-words block w-full">{code}</code>
               </pre>
             </div>
           );
@@ -73,8 +73,8 @@ export default function MessageDisplay({ message }: MessageProps) {
         
         // Fallback for malformed code blocks
         return (
-          <pre key={index} className="my-2 bg-gray-100 p-3 rounded-md overflow-x-auto whitespace-pre-wrap break-words">
-            <code className="break-words">{part.slice(3, -3)}</code>
+          <pre key={index} className="my-2 bg-gray-100 p-3 rounded-md overflow-x-auto whitespace-pre-wrap break-words w-full">
+            <code className="break-words block w-full">{part.slice(3, -3)}</code>
           </pre>
         );
       }
@@ -259,14 +259,17 @@ export default function MessageDisplay({ message }: MessageProps) {
         // Check if this is a chart from QuickChart.io
         const isChart = imageUrl.includes('quickchart.io/chart');
         
+        // Ensure the URL is properly encoded for QuickChart
+        const encodedUrl = isChart ? imageUrl.replace(/\s/g, '%20') : imageUrl;
+        
         parts.push(
           <div key={`img-${match.index}`} className={`my-4 ${isChart ? 'chart-container relative' : ''}`}>
             <img 
-              src={imageUrl} 
+              src={encodedUrl} 
               alt={altText} 
               className={`${isChart ? 'max-w-full h-auto rounded-lg shadow-md cursor-pointer transition-all hover:shadow-lg hover:scale-[1.01] border border-gray-200' : 'inline-block max-w-full h-auto'}`}
               loading="lazy"
-              onClick={() => isChart && handleImageClick(imageUrl, altText)}
+              onClick={() => isChart && handleImageClick(encodedUrl, altText)}
             />
             {isChart && (
               <>
@@ -331,52 +334,54 @@ export default function MessageDisplay({ message }: MessageProps) {
     }
     
     return (
-      <div key={`table-container-${blockIndex}`} className="overflow-x-auto my-4 max-w-full">
-        <table className="min-w-full border-collapse border border-gray-300">
-          <tbody>
-            {dataRows.map((row, rowIdx) => {
-              const cells = row.split('|').filter(Boolean).map(cell => cell.trim());
-              const isHeader = rowIdx === 0;
-              
-              return (
-                <tr 
-                  key={rowIdx} 
-                  className={isHeader ? "bg-gray-100" : rowIdx % 2 === 0 ? "bg-gray-50" : ""}
-                >
-                  {cells.map((cell, cellIdx) => {
-                    const align = alignments[cellIdx] || 'left';
-                    const style = { textAlign: align };
-                    
-                    return isHeader ? (
-                      <th 
-                        key={cellIdx} 
-                        className="px-4 py-2 border border-gray-300 font-medium"
-                        style={style as React.CSSProperties}
-                      >
-                        {processInlineMarkdown(cell)}
-                      </th>
-                    ) : (
-                      <td 
-                        key={cellIdx} 
-                        className="px-4 py-2 border border-gray-300"
-                        style={style as React.CSSProperties}
-                      >
-                        {processInlineMarkdown(cell)}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div key={`table-container-${blockIndex}`} className="overflow-x-auto my-4 w-full">
+        <div className="min-w-full inline-block">
+          <table className="w-full border-collapse border border-gray-300">
+            <tbody>
+              {dataRows.map((row, rowIdx) => {
+                const cells = row.split('|').filter(Boolean).map(cell => cell.trim());
+                const isHeader = rowIdx === 0;
+                
+                return (
+                  <tr 
+                    key={rowIdx} 
+                    className={isHeader ? "bg-gray-100" : rowIdx % 2 === 0 ? "bg-gray-50" : ""}
+                  >
+                    {cells.map((cell, cellIdx) => {
+                      const align = alignments[cellIdx] || 'left';
+                      const style = { textAlign: align };
+                      
+                      return isHeader ? (
+                        <th 
+                          key={cellIdx} 
+                          className="px-4 py-2 border border-gray-300 font-medium whitespace-normal break-words"
+                          style={style as React.CSSProperties}
+                        >
+                          {processInlineMarkdown(cell)}
+                        </th>
+                      ) : (
+                        <td 
+                          key={cellIdx} 
+                          className="px-4 py-2 border border-gray-300 whitespace-normal break-words"
+                          style={style as React.CSSProperties}
+                        >
+                          {processInlineMarkdown(cell)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   };
   
   return (
     <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-      <div className={`rounded-lg p-3 max-w-[85%] ${
+      <div className={`rounded-lg p-3 max-w-[80%] ${
         message.role === 'user' 
           ? 'bg-blue-500 text-white' 
           : 'bg-white border border-gray-200 text-gray-800'
@@ -389,7 +394,7 @@ export default function MessageDisplay({ message }: MessageProps) {
             {format(timestamp, 'p')}
           </div>
         </div>
-        <div className={`text-sm break-words ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>
+        <div className={`text-sm break-words whitespace-pre-wrap overflow-hidden ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>
           {renderContent(message.content)}
         </div>
       </div>
