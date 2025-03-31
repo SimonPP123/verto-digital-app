@@ -116,7 +116,7 @@ export default function MessageDisplay({ message }: MessageProps) {
     const flushTable = () => {
       if (tableRows.length > 0) {
         // Detect if it's a markdown table
-        const isMarkdownTable = tableRows.some(row => row.includes('|---'));
+        const isMarkdownTable = tableRows.some(row => row.match(/^\|[\s\-\|]*\|$/));
         // Detect if it's a BigQuery table format
         const isBigQueryFormat = isBigQueryTable;
 
@@ -334,17 +334,218 @@ export default function MessageDisplay({ message }: MessageProps) {
     return processed;
   };
 
+  // Process BigQuery ASCII table format to extract structured data
+  const processBigQueryTable = (rows: string[]): { header: string[], rows: string[][] } => {
+    const result: { header: string[], rows: string[][] } = {
+      header: [],
+      rows: []
+    };
+
+    // Clean up each row by removing extra whitespace
+    const cleanedRows = rows.map(row => row.trim());
+
+    // Log table structure for debugging
+    console.log("Processing BigQuery table with rows:", cleanedRows);
+
+    // Find separator lines (starting and ending with +)
+    const separatorIndices = cleanedRows.reduce((indices, row, idx) => {
+      if (row.startsWith('+') && row.endsWith('+') && row.includes('-')) {
+        indices.push(idx);
+      }
+      return indices;
+    }, [] as number[]);
+
+    console.log("Separator indices:", separatorIndices);
+
+    // Standard BigQuery table has at least 3 separator rows (top, header-data separator, bottom)
+    if (separatorIndices.length >= 3) {
+      // Header is the row after the first separator
+      const headerIndex = separatorIndices[0] + 1;
+
+      // If we have a valid header row
+      if (headerIndex < cleanedRows.length && cleanedRows[headerIndex].includes('|')) {
+        // Extract headers
+        result.header = cleanedRows[headerIndex]
+          .split('|')
+          .map(cell => cell.trim())
+          .filter(cell => cell.length > 0);
+
+        console.log("Extracted headers:", result.header);
+
+        // Process data rows - all rows between header separator and bottom separator
+        // that start with | and aren't separator rows
+        for (let i = separatorIndices[1] + 1; i < separatorIndices[separatorIndices.length - 1]; i++) {
+          const row = cleanedRows[i];
+
+          // Skip separator rows
+          if (row.startsWith('+') && row.endsWith('+') && row.includes('-')) {
+            continue;
+          }
+
+          // Process data cells
+          if (row.includes('|')) {
+            const cells = row
+              .split('|')
+              .map(cell => {
+                let text = cell.trim();
+                // Handle (null) values and null text values
+                if (text === '(null)' || text === 'null' || text === '(NULL)' || text === 'NULL') {
+                  text = 'null';
+                }
+                return text;
+              })
+              .filter(cell => cell.length > 0);
+
+            if (cells.length > 0) {
+              result.rows.push(cells);
+            }
+          }
+        }
+      }
+    } else {
+      // Alternative detection for tables without clear separators
+      // Check if the first non-empty row looks like a header (contains column names)
+      let hasFoundHeader = false;
+
+      for (let i = 0; i < cleanedRows.length; i++) {
+        const row = cleanedRows[i];
+
+        // Skip empty rows and separator rows
+        if (!row || row.trim() === '' ||
+          (row.startsWith('+') && row.endsWith('+') && row.includes('-'))) {
+          continue;
+        }
+
+        // If we haven't found a header yet, treat this as the header row
+        if (!hasFoundHeader && row.includes('|')) {
+          result.header = row
+            .split('|')
+            .map(cell => cell.trim())
+            .filter(cell => cell.length > 0);
+
+          hasFoundHeader = true;
+          continue;
+        }
+
+        // All non-empty rows that aren't separators after the header are data rows
+        if (hasFoundHeader && row.includes('|')) {
+          const cells = row
+            .split('|')
+            .map(cell => {
+              let text = cell.trim();
+              // Handle null values
+              if (text === '(null)' || text === 'null' || text === '(NULL)' || text === 'NULL') {
+                text = 'null';
+              }
+              return text;
+            })
+            .filter(cell => cell.length > 0);
+
+          if (cells.length > 0) {
+            result.rows.push(cells);
+          }
+        }
+      }
+    }
+
+    // If table parsing failed, try a simpler approach for plain text tables
+    if (result.header.length === 0 && cleanedRows.length > 0) {
+      console.log("Using fallback table parsing");
+
+      // Find the first non-empty row that's not a separator
+      const firstDataRow = cleanedRows.find(row =>
+        row.trim() !== '' &&
+        !(row.startsWith('+') && row.endsWith('+') && row.includes('-'))
+      );
+
+      if (firstDataRow) {
+        // Split the row by multiple spaces or tabs
+        const columnPositions = firstDataRow
+          .split(/\s{2,}|\t/)
+          .filter(col => col.trim() !== '')
+          .map(col => col.trim());
+
+        // Use these as headers
+        result.header = columnPositions;
+
+        // Process all non-empty, non-separator rows as data
+        for (let i = 0; i < cleanedRows.length; i++) {
+          const row = cleanedRows[i];
+
+          // Skip empty rows, separator rows, and the header
+          if (!row || row.trim() === '' ||
+            (row.startsWith('+') && row.endsWith('+') && row.includes('-')) ||
+            row === firstDataRow) {
+            continue;
+          }
+
+          // Split by multiple spaces or tabs
+          const cells = row
+            .split(/\s{2,}|\t/)
+            .map(cell => cell.trim())
+            .filter(cell => cell.length > 0);
+
+          if (cells.length > 0) {
+            result.rows.push(cells);
+          }
+        }
+      }
+    }
+
+    return result;
+  };
+
   // Render a table from markdown-style or ASCII-style tables
   const renderTable = (tableRows: string[], blockIndex: number, isMarkdownStyle: boolean, isBigQueryFormat: boolean = false) => {
     let dataRows: string[] | string[][] = tableRows;
     let headerRow: string[] = [];
 
     if (isBigQueryFormat) {
+      console.log("Processing BigQuery table format");
       // For BigQuery tables, convert ASCII format to structured data
       const cleanedRows = processBigQueryTable(tableRows);
       if (cleanedRows.header && cleanedRows.rows) {
         headerRow = cleanedRows.header;
         dataRows = cleanedRows.rows;
+
+        // If we have structured data, render a clean HTML table
+        return (
+          <div key={`table-container-${blockIndex}`} className="overflow-x-auto my-4 w-full max-w-full">
+            <div className="inline-block max-w-full">
+              <table className="w-full border-collapse border border-gray-300 table-fixed">
+                <thead className="bg-gray-100">
+                  <tr>
+                    {headerRow.map((header, idx) => (
+                      <th
+                        key={idx}
+                        className="px-4 py-2 border border-gray-300 font-medium whitespace-normal break-words max-w-xs"
+                      >
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.isArray(dataRows) && dataRows.map((row, rowIdx) => (
+                    <tr
+                      key={rowIdx}
+                      className={rowIdx % 2 === 0 ? "bg-gray-50" : ""}
+                    >
+                      {Array.isArray(row) && row.map((cell, cellIdx) => (
+                        <td
+                          key={cellIdx}
+                          className="px-4 py-2 border border-gray-300 whitespace-normal break-words max-w-xs"
+                        >
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
       }
     } else if (isMarkdownStyle) {
       // For markdown tables, remove separator row (contains only |, -, and spaces)
@@ -365,6 +566,7 @@ export default function MessageDisplay({ message }: MessageProps) {
       }
     }
 
+    // Fallback to original table rendering
     return (
       <div key={`table-container-${blockIndex}`} className="overflow-x-auto my-4 w-full max-w-full">
         <div className="inline-block max-w-full">
@@ -427,84 +629,6 @@ export default function MessageDisplay({ message }: MessageProps) {
     );
   };
 
-  // Process BigQuery ASCII table format to extract structured data
-  const processBigQueryTable = (rows: string[]): { header: string[], rows: string[][] } => {
-    const result: { header: string[], rows: string[][] } = {
-      header: [],
-      rows: []
-    };
-
-    // Find the first header separator (usually a row with '+---+' pattern)
-    const headerSeparatorIndex = rows.findIndex(row =>
-      row.startsWith('+') && row.endsWith('+') &&
-      (row.includes('-+-') || row.includes('--+--'))
-    );
-
-    // Find column names row (the row immediately after the first +---+ line and before the next one)
-    let columnNamesRow = '';
-    if (headerSeparatorIndex >= 0 && headerSeparatorIndex + 1 < rows.length) {
-      columnNamesRow = rows[headerSeparatorIndex + 1];
-    }
-
-    // Find the second separator line (after column names)
-    const secondSeparatorIndex = rows.findIndex((row, idx) =>
-      idx > headerSeparatorIndex &&
-      row.startsWith('+') && row.endsWith('+') &&
-      (row.includes('-+-') || row.includes('--+--'))
-    );
-
-    // Find the last separator line (footer)
-    const footerSeparatorIndex = rows.findIndex((row, idx) =>
-      idx > secondSeparatorIndex &&
-      row.startsWith('+') && row.endsWith('+') &&
-      (row.includes('-+-') || row.includes('--+--'))
-    );
-
-    // Extract column headers
-    if (columnNamesRow && columnNamesRow.includes('|')) {
-      result.header = columnNamesRow
-        .split('|')
-        .map(cell => cell.trim())
-        .filter(cell => cell.length > 0);
-    }
-
-    // Process data rows (between second separator and footer)
-    const startIdx = secondSeparatorIndex >= 0 ? secondSeparatorIndex + 1 : headerSeparatorIndex + 2;
-    const endIdx = footerSeparatorIndex >= 0 ? footerSeparatorIndex : rows.length;
-
-    for (let i = startIdx; i < endIdx; i++) {
-      const row = rows[i];
-
-      // Skip empty rows or separator rows
-      if (!row || row.trim() === '' ||
-        (row.startsWith('+') && row.endsWith('+') && row.includes('-'))) {
-        continue;
-      }
-
-      // Process data cells
-      if (row.includes('|')) {
-        const cells = row
-          .split('|')
-          .map(cell => {
-            // Clean up the cell content
-            let text = cell.trim();
-            // Handle (null) values - remove parentheses
-            if (text === '(null)') {
-              text = 'null';
-            }
-            return text;
-          })
-          .filter(cell => cell.length > 0);
-
-        if (cells.length > 0) {
-          result.rows.push(cells);
-        }
-      }
-    }
-
-    return result;
-  };
-
   return (
     <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
       <div className={`rounded-lg p-3 w-[80%] max-w-[80%] overflow-hidden ${message.role === 'user'
@@ -563,4 +687,4 @@ export default function MessageDisplay({ message }: MessageProps) {
       )}
     </div>
   );
-} 
+}
