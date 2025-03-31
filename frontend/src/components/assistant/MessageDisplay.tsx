@@ -34,14 +34,14 @@ export default function MessageDisplay({ message }: MessageProps) {
   // Helper function to render content with markdown elements
   const renderContent = (content: string) => {
     // Check for raw chart URLs that aren't properly formatted as markdown images
-    const chartUrlPattern = /(https:\/\/quickchart\.io\/chart\?[^"\s<>]+)/g;
+    const chartUrlPattern = /\(https:\/\/quickchart\.io\/chart\?c=[^)]+\)/g;
     let modifiedContent = content;
     
     // Convert raw chart URLs to markdown image format
     if (chartUrlPattern.test(content)) {
       modifiedContent = content.replace(
         chartUrlPattern, 
-        match => `![GA4 Analysis Chart](${match})`
+        match => `![GA4 Analysis Chart](${match.slice(1, -1)})`
       );
     }
     
@@ -263,11 +263,11 @@ export default function MessageDisplay({ message }: MessageProps) {
         const encodedUrl = isChart ? imageUrl.replace(/\s/g, '%20') : imageUrl;
         
         parts.push(
-          <div key={`img-${match.index}`} className={`my-4 ${isChart ? 'chart-container relative' : ''}`}>
+          <div key={`img-${match.index}`} className={`my-4 ${isChart ? 'chart-container relative w-full' : ''}`}>
             <img 
               src={encodedUrl} 
               alt={altText} 
-              className={`${isChart ? 'max-w-full h-auto rounded-lg shadow-md cursor-pointer transition-all hover:shadow-lg hover:scale-[1.01] border border-gray-200' : 'inline-block max-w-full h-auto'}`}
+              className={`${isChart ? 'w-full h-auto max-h-[400px] object-contain rounded-lg shadow-md cursor-pointer transition-all hover:shadow-lg hover:scale-[1.01] border border-gray-200' : 'inline-block max-w-full h-auto'}`}
               loading="lazy"
               onClick={() => isChart && handleImageClick(encodedUrl, altText)}
             />
@@ -381,7 +381,7 @@ export default function MessageDisplay({ message }: MessageProps) {
   
   return (
     <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-      <div className={`rounded-lg p-3 max-w-[80%] ${
+      <div className={`rounded-lg p-3 w-[80%] max-w-[80%] ${
         message.role === 'user' 
           ? 'bg-blue-500 text-white' 
           : 'bg-white border border-gray-200 text-gray-800'
