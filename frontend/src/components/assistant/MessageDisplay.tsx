@@ -12,35 +12,35 @@ type MessageProps = {
 };
 
 export default function MessageDisplay({ message }: MessageProps) {
-  const timestamp = typeof message.timestamp === 'string' 
-    ? new Date(message.timestamp) 
+  const timestamp = typeof message.timestamp === 'string'
+    ? new Date(message.timestamp)
     : message.timestamp;
-  
+
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [zoomedImageAlt, setZoomedImageAlt] = useState<string>('');
-  
+
   // Helper function to handle zooming in on an image
   const handleImageClick = (imageUrl: string, altText: string) => {
     setZoomedImage(imageUrl);
     setZoomedImageAlt(altText);
   };
-  
+
   // Helper function to close zoomed image modal
   const closeZoomedImage = () => {
     setZoomedImage(null);
     setZoomedImageAlt('');
   };
-  
+
   // Helper function to render content with markdown elements
   const renderContent = (content: string) => {
     // Check for raw chart URLs that aren't properly formatted as markdown images
     const chartUrlPattern = /\(https:\/\/quickchart\.io\/chart\?c=[^)]+\)/g;
     let modifiedContent = content;
-    
+
     // Convert raw chart URLs to markdown image format
     if (chartUrlPattern.test(content)) {
       modifiedContent = content.replace(
-        chartUrlPattern, 
+        chartUrlPattern,
         match => {
           // Remove the parentheses and ensure proper URL encoding
           const url = match.slice(1, -1);
@@ -48,19 +48,19 @@ export default function MessageDisplay({ message }: MessageProps) {
         }
       );
     }
-    
+
     // Split by code blocks first
     const parts = modifiedContent.split(/(```[\s\S]*?```)/g);
-    
+
     return parts.map((part, index) => {
       // Check if this part is a code block
       if (part.startsWith('```') && part.endsWith('```')) {
         // Extract the code and language
         const match = part.match(/```(\w*)\n([\s\S]*?)```/);
-        
+
         if (match) {
           const [, language, code] = match;
-          
+
           return (
             <div key={index} className="my-2 rounded-md overflow-hidden w-full">
               {language && (
@@ -74,7 +74,7 @@ export default function MessageDisplay({ message }: MessageProps) {
             </div>
           );
         }
-        
+
         // Fallback for malformed code blocks
         return (
           <pre key={index} className="my-2 bg-gray-100 p-3 rounded-md overflow-x-auto whitespace-pre-wrap break-words w-full">
@@ -82,12 +82,12 @@ export default function MessageDisplay({ message }: MessageProps) {
           </pre>
         );
       }
-      
+
       // Process the regular text part (non-code blocks)
       return processTextContent(part, index);
     });
   };
-  
+
   // Helper function to process regular text content with markdown elements
   const processTextContent = (content: string, blockIndex: number) => {
     const lines = content.split('\n');
@@ -96,7 +96,7 @@ export default function MessageDisplay({ message }: MessageProps) {
     let inTable = false;
     let tableRows: string[] = [];
     let isBigQueryTable = false;
-    
+
     const flushParagraph = () => {
       if (currentParagraph.length > 0) {
         result.push(
@@ -112,25 +112,25 @@ export default function MessageDisplay({ message }: MessageProps) {
         currentParagraph = [];
       }
     };
-    
+
     const flushTable = () => {
       if (tableRows.length > 0) {
         // Detect if it's a markdown table
         const isMarkdownTable = tableRows.some(row => row.includes('|---'));
         // Detect if it's a BigQuery table format
         const isBigQueryFormat = isBigQueryTable;
-        
+
         result.push(renderTable(tableRows, blockIndex, isMarkdownTable, isBigQueryFormat));
         tableRows = [];
         inTable = false;
         isBigQueryTable = false;
       }
     };
-    
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmedLine = line.trim();
-      
+
       // Check for headers
       if (trimmedLine.startsWith('# ')) {
         flushParagraph();
@@ -177,17 +177,17 @@ export default function MessageDisplay({ message }: MessageProps) {
       else if (trimmedLine.match(/^(\d+\.|[-*+])\s/)) {
         flushParagraph();
         flushTable();
-        
+
         const isOrderedList = /^\d+\./.test(trimmedLine);
         const listItems: string[] = [];
         let j = i;
-        
+
         while (j < lines.length && lines[j].trim().match(/^(\d+\.|[-*+])\s/)) {
           const itemContent = lines[j].trim().replace(/^(\d+\.|[-*+])\s/, '');
           listItems.push(itemContent);
           j++;
         }
-        
+
         if (isOrderedList) {
           result.push(
             <ol key={`ol-${blockIndex}-${i}`} className="list-decimal pl-5 mb-3">
@@ -205,12 +205,12 @@ export default function MessageDisplay({ message }: MessageProps) {
             </ul>
           );
         }
-        
+
         i = j - 1; // Skip processed lines
       }
       // Check for BigQuery table format (starts with '+--' and ends with '+') 
-      else if (trimmedLine.startsWith('+') && trimmedLine.endsWith('+') && 
-               trimmedLine.includes('-') && (trimmedLine.includes('+--') || trimmedLine.includes('-+-'))) {
+      else if (trimmedLine.startsWith('+') && trimmedLine.endsWith('+') &&
+        trimmedLine.includes('-') && (trimmedLine.includes('+--') || trimmedLine.includes('-+-'))) {
         if (!inTable) {
           flushParagraph();
           inTable = true;
@@ -246,49 +246,49 @@ export default function MessageDisplay({ message }: MessageProps) {
         currentParagraph.push(line);
       }
     }
-    
+
     // Flush any remaining content
     flushTable();
     flushParagraph();
-    
+
     return <div key={`block-${blockIndex}`}>{result}</div>;
   };
-  
+
   // Process inline markdown (bold, italic, etc.)
   const processInlineMarkdown = (text: string) => {
     // Check for markdown image links first
     const imageRegex = /!\[(.*?)\]\((https?:\/\/[^)]+)\)/g;
     const hasImages = imageRegex.test(text);
-    
+
     if (hasImages) {
       // Reset regex lastIndex for reuse
       imageRegex.lastIndex = 0;
-      
+
       const parts = [];
       let lastIndex = 0;
       let match;
-      
+
       while ((match = imageRegex.exec(text)) !== null) {
         // Add text before the image
         if (match.index > lastIndex) {
           const beforeText = text.substring(lastIndex, match.index);
           parts.push(<span key={`text-${lastIndex}`} dangerouslySetInnerHTML={{ __html: processMarkdownText(beforeText) }} />);
         }
-        
+
         // Add the image
         const [, altText, imageUrl] = match;
-        
+
         // Check if this is a chart from QuickChart.io
         const isChart = imageUrl.includes('quickchart.io/chart');
-        
+
         // Ensure the URL is properly encoded for QuickChart
         const encodedUrl = isChart ? imageUrl.replace(/\s/g, '%20') : imageUrl;
-        
+
         parts.push(
           <div key={`img-${match.index}`} className={`my-4 ${isChart ? 'chart-container relative w-full max-w-full overflow-hidden' : ''}`}>
-            <img 
-              src={encodedUrl} 
-              alt={altText} 
+            <img
+              src={encodedUrl}
+              alt={altText}
               className={`${isChart ? 'w-full h-auto max-h-[400px] object-contain rounded-lg shadow-md cursor-pointer border border-gray-200' : 'inline-block max-w-full h-auto'}`}
               loading="lazy"
               onClick={() => isChart && handleImageClick(encodedUrl, altText)}
@@ -303,42 +303,42 @@ export default function MessageDisplay({ message }: MessageProps) {
             )}
           </div>
         );
-        
+
         lastIndex = imageRegex.lastIndex;
       }
-      
+
       // Add any remaining text
       if (lastIndex < text.length) {
         const remainingText = text.substring(lastIndex);
         parts.push(<span key={`text-${lastIndex}`} dangerouslySetInnerHTML={{ __html: processMarkdownText(remainingText) }} />);
       }
-      
+
       return <>{parts}</>;
     }
-    
+
     // If no images, process as regular markdown text
     return <span dangerouslySetInnerHTML={{ __html: processMarkdownText(text) }} />;
   };
-  
+
   // Helper function to process regular markdown text without images
   const processMarkdownText = (text: string) => {
     // Replace ** or __ with bold
     let processed = text.replace(/(\*\*|__)(.*?)\1/g, '<strong>$2</strong>');
-    
+
     // Replace * or _ with italic
     processed = processed.replace(/(\*|_)(.*?)\1/g, '<em>$2</em>');
-    
+
     // Replace ` with inline code
     processed = processed.replace(/`(.*?)`/g, '<code>$1</code>');
-    
+
     return processed;
   };
-  
+
   // Render a table from markdown-style or ASCII-style tables
   const renderTable = (tableRows: string[], blockIndex: number, isMarkdownStyle: boolean, isBigQueryFormat: boolean = false) => {
     let dataRows: string[] | string[][] = tableRows;
     let headerRow: string[] = [];
-    
+
     if (isBigQueryFormat) {
       // For BigQuery tables, convert ASCII format to structured data
       const cleanedRows = processBigQueryTable(tableRows);
@@ -350,7 +350,7 @@ export default function MessageDisplay({ message }: MessageProps) {
       // For markdown tables, remove separator row (contains only |, -, and spaces)
       dataRows = tableRows.filter(row => !row.match(/^\|[\s\-\|]*\|$/));
     }
-    
+
     // Get column alignment information if it's a markdown table
     let alignments: ('left' | 'center' | 'right')[] = [];
     if (isMarkdownStyle && !isBigQueryFormat) {
@@ -364,7 +364,7 @@ export default function MessageDisplay({ message }: MessageProps) {
         });
       }
     }
-    
+
     return (
       <div key={`table-container-${blockIndex}`} className="overflow-x-auto my-4 w-full max-w-full">
         <div className="inline-block max-w-full">
@@ -373,7 +373,7 @@ export default function MessageDisplay({ message }: MessageProps) {
               {Array.isArray(dataRows) && dataRows.map((row, rowIdx) => {
                 let cells: string[];
                 const isStringArray = Array.isArray(row);
-                
+
                 if (isBigQueryFormat && isStringArray) {
                   // For BigQuery format, row is already a string array
                   cells = row;
@@ -382,34 +382,34 @@ export default function MessageDisplay({ message }: MessageProps) {
                   const rowStr = isStringArray ? row.join('|') : row;
                   cells = rowStr.split('|').filter(Boolean).map((cell: string) => cell.trim());
                 }
-                
+
                 const isHeader = rowIdx === 0 || (isBigQueryFormat && !isStringArray && row.includes('---'));
-                
+
                 if (isHeader && cells.length === 1 && cells[0].includes('---')) {
                   // This is a separator row in BigQuery format, skip it
                   return null;
                 }
-                
+
                 return (
-                  <tr 
-                    key={rowIdx} 
+                  <tr
+                    key={rowIdx}
                     className={isHeader ? "bg-gray-100" : rowIdx % 2 === 0 ? "bg-gray-50" : ""}
                   >
                     {cells.map((cell, cellIdx) => {
                       const align = alignments[cellIdx] || 'left';
                       const style = { textAlign: align };
-                      
+
                       return isHeader ? (
-                        <th 
-                          key={cellIdx} 
+                        <th
+                          key={cellIdx}
                           className="px-4 py-2 border border-gray-300 font-medium whitespace-normal break-words max-w-xs"
                           style={style as React.CSSProperties}
                         >
                           {processInlineMarkdown(cell)}
                         </th>
                       ) : (
-                        <td 
-                          key={cellIdx} 
+                        <td
+                          key={cellIdx}
                           className="px-4 py-2 border border-gray-300 whitespace-normal break-words max-w-xs"
                           style={style as React.CSSProperties}
                         >
@@ -426,65 +426,91 @@ export default function MessageDisplay({ message }: MessageProps) {
       </div>
     );
   };
-  
+
   // Process BigQuery ASCII table format to extract structured data
   const processBigQueryTable = (rows: string[]): { header: string[], rows: string[][] } => {
     const result: { header: string[], rows: string[][] } = {
       header: [],
       rows: []
     };
-    
-    // Find header separator (usually a row with '+-+-+' pattern)
-    const headerSeparatorIndex = rows.findIndex(row => 
-      row.startsWith('+') && row.endsWith('+') && row.includes('-+-')
+
+    // Find the first header separator (usually a row with '+---+' pattern)
+    const headerSeparatorIndex = rows.findIndex(row =>
+      row.startsWith('+') && row.endsWith('+') &&
+      (row.includes('-+-') || row.includes('--+--'))
     );
-    
-    if (headerSeparatorIndex > 0 && headerSeparatorIndex < rows.length - 1) {
-      // Extract header row (usually the row before header separator)
-      const headerRow = rows[headerSeparatorIndex - 1];
-      
-      // Parse header cells
-      if (headerRow.startsWith('|') && headerRow.endsWith('|')) {
-        // Split by | and remove empty entries
-        result.header = headerRow
-          .split('|')
-          .map(cell => cell.trim())
-          .filter(cell => cell.length > 0);
+
+    // Find column names row (the row immediately after the first +---+ line and before the next one)
+    let columnNamesRow = '';
+    if (headerSeparatorIndex >= 0 && headerSeparatorIndex + 1 < rows.length) {
+      columnNamesRow = rows[headerSeparatorIndex + 1];
+    }
+
+    // Find the second separator line (after column names)
+    const secondSeparatorIndex = rows.findIndex((row, idx) =>
+      idx > headerSeparatorIndex &&
+      row.startsWith('+') && row.endsWith('+') &&
+      (row.includes('-+-') || row.includes('--+--'))
+    );
+
+    // Find the last separator line (footer)
+    const footerSeparatorIndex = rows.findIndex((row, idx) =>
+      idx > secondSeparatorIndex &&
+      row.startsWith('+') && row.endsWith('+') &&
+      (row.includes('-+-') || row.includes('--+--'))
+    );
+
+    // Extract column headers
+    if (columnNamesRow && columnNamesRow.includes('|')) {
+      result.header = columnNamesRow
+        .split('|')
+        .map(cell => cell.trim())
+        .filter(cell => cell.length > 0);
+    }
+
+    // Process data rows (between second separator and footer)
+    const startIdx = secondSeparatorIndex >= 0 ? secondSeparatorIndex + 1 : headerSeparatorIndex + 2;
+    const endIdx = footerSeparatorIndex >= 0 ? footerSeparatorIndex : rows.length;
+
+    for (let i = startIdx; i < endIdx; i++) {
+      const row = rows[i];
+
+      // Skip empty rows or separator rows
+      if (!row || row.trim() === '' ||
+        (row.startsWith('+') && row.endsWith('+') && row.includes('-'))) {
+        continue;
       }
-      
-      // Process data rows (after the header separator)
-      for (let i = headerSeparatorIndex + 1; i < rows.length; i++) {
-        const row = rows[i];
-        
-        // Skip separator rows
-        if (row.startsWith('+') && row.endsWith('+') && row.includes('-')) {
-          continue;
-        }
-        
-        // Parse data cells
-        if (row.startsWith('|') && row.endsWith('|')) {
-          const cells = row
-            .split('|')
-            .map(cell => cell.trim())
-            .filter(cell => cell.length > 0);
-          
-          if (cells.length > 0) {
-            result.rows.push(cells);
-          }
+
+      // Process data cells
+      if (row.includes('|')) {
+        const cells = row
+          .split('|')
+          .map(cell => {
+            // Clean up the cell content
+            let text = cell.trim();
+            // Handle (null) values - remove parentheses
+            if (text === '(null)') {
+              text = 'null';
+            }
+            return text;
+          })
+          .filter(cell => cell.length > 0);
+
+        if (cells.length > 0) {
+          result.rows.push(cells);
         }
       }
     }
-    
+
     return result;
   };
-  
+
   return (
     <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-      <div className={`rounded-lg p-3 w-[80%] max-w-[80%] overflow-hidden ${
-        message.role === 'user' 
-          ? 'bg-blue-500 text-white' 
+      <div className={`rounded-lg p-3 w-[80%] max-w-[80%] overflow-hidden ${message.role === 'user'
+          ? 'bg-blue-500 text-white'
           : 'bg-white border border-gray-200 text-gray-800'
-      }`}>
+        }`}>
         <div className="flex items-center mb-1">
           <div className={`text-xs ${message.role === 'user' ? 'text-blue-100' : 'text-gray-500'}`}>
             {message.role === 'user' ? 'You' : 'Assistant'}
@@ -497,15 +523,15 @@ export default function MessageDisplay({ message }: MessageProps) {
           {renderContent(message.content)}
         </div>
       </div>
-      
+
       {/* Image Zoom Modal */}
       {zoomedImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4" onClick={closeZoomedImage}>
           <div className="max-w-[95%] max-h-[95%] bg-white rounded-lg shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-4 border-b">
               <h3 className="text-lg font-medium text-gray-900 truncate">{zoomedImageAlt}</h3>
-              <button 
-                className="text-gray-500 hover:text-gray-800" 
+              <button
+                className="text-gray-500 hover:text-gray-800"
                 onClick={closeZoomedImage}
                 aria-label="Close"
               >
@@ -515,18 +541,18 @@ export default function MessageDisplay({ message }: MessageProps) {
               </button>
             </div>
             <div className="p-4 bg-gray-100 flex items-center justify-center">
-              <img 
-                src={zoomedImage} 
-                alt={zoomedImageAlt} 
+              <img
+                src={zoomedImage}
+                alt={zoomedImageAlt}
                 className="max-w-full max-h-[70vh] object-contain"
               />
             </div>
             <div className="p-3 bg-white border-t text-center">
               <div className="text-sm text-gray-600">{zoomedImageAlt}</div>
-              <a 
-                href={zoomedImage} 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href={zoomedImage}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-block mt-2 text-xs text-blue-600 hover:text-blue-800 hover:underline"
               >
                 Open image in new tab
