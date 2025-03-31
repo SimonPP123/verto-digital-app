@@ -95,6 +95,7 @@ export default function MessageDisplay({ message }: MessageProps) {
     let currentParagraph: string[] = [];
     let inTable = false;
     let tableRows: string[] = [];
+    let isBigQueryTable = false;
     
     const flushParagraph = () => {
       if (currentParagraph.length > 0) {
@@ -116,10 +117,13 @@ export default function MessageDisplay({ message }: MessageProps) {
       if (tableRows.length > 0) {
         // Detect if it's a markdown table
         const isMarkdownTable = tableRows.some(row => row.includes('|---'));
+        // Detect if it's a BigQuery table format
+        const isBigQueryFormat = isBigQueryTable;
         
-        result.push(renderTable(tableRows, blockIndex, isMarkdownTable));
+        result.push(renderTable(tableRows, blockIndex, isMarkdownTable, isBigQueryFormat));
         tableRows = [];
         inTable = false;
+        isBigQueryTable = false;
       }
     };
     
@@ -204,12 +208,26 @@ export default function MessageDisplay({ message }: MessageProps) {
         
         i = j - 1; // Skip processed lines
       }
-      // Check for table (starts with | and ends with |)
+      // Check for BigQuery table format (starts with '+--' and ends with '+') 
+      else if (trimmedLine.startsWith('+') && trimmedLine.endsWith('+') && 
+               trimmedLine.includes('-') && (trimmedLine.includes('+--') || trimmedLine.includes('-+-'))) {
+        if (!inTable) {
+          flushParagraph();
+          inTable = true;
+          isBigQueryTable = true;
+        }
+        tableRows.push(trimmedLine);
+      }
+      // Standard markdown table (starts with | and ends with |)
       else if (trimmedLine.startsWith('|') && trimmedLine.endsWith('|')) {
         if (!inTable) {
           flushParagraph();
           inTable = true;
         }
+        tableRows.push(trimmedLine);
+      }
+      // If we detected a BigQuery table and this is a data row (usually starts with |)
+      else if (inTable && isBigQueryTable && trimmedLine.startsWith('|')) {
         tableRows.push(trimmedLine);
       }
       // Empty line marks the end of a paragraph or table
@@ -317,15 +335,25 @@ export default function MessageDisplay({ message }: MessageProps) {
   };
   
   // Render a table from markdown-style or ASCII-style tables
-  const renderTable = (tableRows: string[], blockIndex: number, isMarkdownStyle: boolean) => {
-    // For markdown tables, remove separator row (contains only |, -, and spaces)
-    let dataRows = isMarkdownStyle 
-      ? tableRows.filter(row => !row.match(/^\|[\s\-\|]*\|$/))
-      : tableRows;
+  const renderTable = (tableRows: string[], blockIndex: number, isMarkdownStyle: boolean, isBigQueryFormat: boolean = false) => {
+    let dataRows: string[] | string[][] = tableRows;
+    let headerRow: string[] = [];
+    
+    if (isBigQueryFormat) {
+      // For BigQuery tables, convert ASCII format to structured data
+      const cleanedRows = processBigQueryTable(tableRows);
+      if (cleanedRows.header && cleanedRows.rows) {
+        headerRow = cleanedRows.header;
+        dataRows = cleanedRows.rows;
+      }
+    } else if (isMarkdownStyle) {
+      // For markdown tables, remove separator row (contains only |, -, and spaces)
+      dataRows = tableRows.filter(row => !row.match(/^\|[\s\-\|]*\|$/));
+    }
     
     // Get column alignment information if it's a markdown table
     let alignments: ('left' | 'center' | 'right')[] = [];
-    if (isMarkdownStyle) {
+    if (isMarkdownStyle && !isBigQueryFormat) {
       const separatorRow = tableRows.find(row => row.match(/^\|[\s\-\|]*\|$/));
       if (separatorRow) {
         alignments = separatorRow.split('|').filter(Boolean).map(cell => {
@@ -342,9 +370,25 @@ export default function MessageDisplay({ message }: MessageProps) {
         <div className="inline-block max-w-full">
           <table className="w-full border-collapse border border-gray-300 table-fixed">
             <tbody>
-              {dataRows.map((row, rowIdx) => {
-                const cells = row.split('|').filter(Boolean).map(cell => cell.trim());
-                const isHeader = rowIdx === 0;
+              {Array.isArray(dataRows) && dataRows.map((row, rowIdx) => {
+                let cells: string[];
+                const isStringArray = Array.isArray(row);
+                
+                if (isBigQueryFormat && isStringArray) {
+                  // For BigQuery format, row is already a string array
+                  cells = row;
+                } else {
+                  // For markdown tables, split by pipe and trim
+                  const rowStr = isStringArray ? row.join('|') : row;
+                  cells = rowStr.split('|').filter(Boolean).map((cell: string) => cell.trim());
+                }
+                
+                const isHeader = rowIdx === 0 || (isBigQueryFormat && !isStringArray && row.includes('---'));
+                
+                if (isHeader && cells.length === 1 && cells[0].includes('---')) {
+                  // This is a separator row in BigQuery format, skip it
+                  return null;
+                }
                 
                 return (
                   <tr 
@@ -375,12 +419,63 @@ export default function MessageDisplay({ message }: MessageProps) {
                     })}
                   </tr>
                 );
-              })}
+              }).filter(Boolean)}
             </tbody>
           </table>
         </div>
       </div>
     );
+  };
+  
+  // Process BigQuery ASCII table format to extract structured data
+  const processBigQueryTable = (rows: string[]): { header: string[], rows: string[][] } => {
+    const result: { header: string[], rows: string[][] } = {
+      header: [],
+      rows: []
+    };
+    
+    // Find header separator (usually a row with '+-+-+' pattern)
+    const headerSeparatorIndex = rows.findIndex(row => 
+      row.startsWith('+') && row.endsWith('+') && row.includes('-+-')
+    );
+    
+    if (headerSeparatorIndex > 0 && headerSeparatorIndex < rows.length - 1) {
+      // Extract header row (usually the row before header separator)
+      const headerRow = rows[headerSeparatorIndex - 1];
+      
+      // Parse header cells
+      if (headerRow.startsWith('|') && headerRow.endsWith('|')) {
+        // Split by | and remove empty entries
+        result.header = headerRow
+          .split('|')
+          .map(cell => cell.trim())
+          .filter(cell => cell.length > 0);
+      }
+      
+      // Process data rows (after the header separator)
+      for (let i = headerSeparatorIndex + 1; i < rows.length; i++) {
+        const row = rows[i];
+        
+        // Skip separator rows
+        if (row.startsWith('+') && row.endsWith('+') && row.includes('-')) {
+          continue;
+        }
+        
+        // Parse data cells
+        if (row.startsWith('|') && row.endsWith('|')) {
+          const cells = row
+            .split('|')
+            .map(cell => cell.trim())
+            .filter(cell => cell.length > 0);
+          
+          if (cells.length > 0) {
+            result.rows.push(cells);
+          }
+        }
+      }
+    }
+    
+    return result;
   };
   
   return (
